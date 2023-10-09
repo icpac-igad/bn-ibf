@@ -192,14 +192,29 @@
 \end{minipage}%
 }
 
-%% Section command
-\renewcommand{\section}[1]{
+%%% Section command
+%\renewcommand{\section}[1]{
+%
+%\vspace{2em}{\fontsizesection\selectfont
+%\textbf{\leavevmode
+%#1
+%}}\\[-0.5em]
+%}
 
-\vspace{2em}{\fontsizesection\selectfont
-\textbf{\leavevmode
-#1
-}}\\[-0.5em]
+\makeatletter
+%% Section command
+\renewcommand{\section}[1]{%
+	\vspace{2em}{\fontsizesection\selectfont
+		\textbf{\leavevmode
+			#1
+	}}%
+	%\@ifnextchar\begin\checknextchar{\\[0.5em]}%
 }
+
+%\newcommand{\checknextchar}[1]{%
+%	\@ifnextchar\item{\\[0.5em]}%
+%}
+\makeatother
 
 %% Title command
 \renewcommand{\title}[1]{
@@ -226,16 +241,4 @@
 
 }
 
-\makeatletter
-%% Section command
-\renewcommand{\section}[1]{%
-	\vspace{2em}{\fontsizesection\selectfont
-		\textbf{\leavevmode
-			#1
-	}}%
-	\@ifnextchar\begin{\checknextchar}{\\[0.5em]}%
-	}
-	
-	\newcommand{\checknextchar}[1]{%
-		\@ifnextchar\item{}{\\[0.5em]}%
-	}
+

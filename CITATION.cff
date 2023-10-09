@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Kalladath
+    given-names: Nishadh
+    orcid: https://orcid.org/0000-0002-1536-9041
+  - family-names: Otieno
+    given-names: Viola
+  - family-names: O. Ouma
+    given-names: Jully
+  - family-names: Lorez
+    given-names: Collison
+  - family-names: Amdihun
+    given-names: Ahmed
+title: "How do Bayesian Networks support impact-based forecasting for informed decision?"
+version: 0.0.1
+doi: 
+date-released: 2023-10-09
