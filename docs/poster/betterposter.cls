@@ -74,7 +74,7 @@
 
 \newcommand{\fontsizestandard}{\fontsize{32.00}{50.50} \selectfont}
 \newcommand{\fontsizemain}{\fontsize{80.00}{200.00} \selectfont}
-\newcommand{\fontsizetitle}{\fontsize{60.00}{100.00} \selectfont}
+\newcommand{\fontsizetitle}{\fontsize{70.00}{140.00} \selectfont}
 \newcommand{\fontsizeauthor}{\fontsize{28.00}{28.00} \selectfont}
 \newcommand{\fontsizesection}{\fontsize{28.00}{28.00} \selectfont}
 

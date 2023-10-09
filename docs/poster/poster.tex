@@ -4,20 +4,37 @@
 
 \renewcommand{\maincolumnbackgroundcolor}{theory}
 \usepackage{caption}
-\usepackage{natbib}
+\usepackage[square,numbers]{natbib}
+\renewcommand{\bibfont}{\huge}
 \begin{document}    
 	\betterposter{
 		%%%%%%%% SINGLE LEFT COLUMN (MERGED)
 		
 		\title{How do Bayesian Networks support impact-based forecasting for informed decision-making?}
-		
+		 \vspace{1em}%
+		\section{
+			\begin{minipage}[c]{0.08\textwidth}
+				\includegraphics[width=\linewidth]{img/logo2.png}
+			\end{minipage}%
+		    \hspace{0.5em}%
+			\begin{minipage}[c]{0.08\textwidth}
+				\includegraphics[width=\linewidth]{img/logo1.png}
+			\end{minipage}%
+		    \hspace{1em}%
+			\begin{minipage}[c]{0.9\textwidth}
+				Nishadh K A, Viola Otieno, Jully O. Ouma, Collison Lorez, \& Ahmed Amdihun
+				\\ IGAD Climate Prediction and Applications Centre- ICPAC, Nairobi, Kenya
+			\end{minipage}
+		}
+	    \vspace{1em}%
+		\hrule
 		
 		\section{Introduction}
 		\begin{itemize}
 			\item Impact-based forecasting (IBF) aims to support risk-oriented decisions in disaster risk management by promoting anticipatory actions that minimize damage and loss of life from natural hazards.
 			\item A Bayesian Network (BN) is a directed graphical model representing a set of variables and their conditional probabilistic dependencies.
 			\item IBF essentially uses risk matrices, which are products of the probability of impact and the extent of impact, represented as unconditional probabilities or impact numbers for events, like a flood event.
-			\item However, it fails to consider conditional factors, potential interventions, and critical questions, such as the likelihood of significant consequences under different actions \citep{fenton2018risk}.
+			\item However, it fails to consider conditional factors, potential interventions, and critical questions, such as the likelihood of significant consequences under different actions \cite{fenton2018risk}.
 			
 		\end{itemize}
 		
@@ -26,31 +43,31 @@
 		\begin{center}
 		%\begin{figure}[h!]	
 			\includegraphics[width=\textwidth]{img/BN-model-IBF-v2.png}
-			\captionof{figure}{\LARGE{BN generation steps, using GPTV4\citep{openai2023gpt4} and Python library pgmpy\citep{ankan2015pgmpy}, test image given is from \citep{fenton2018risk} }}
+			\captionof{figure}{\LARGE{BN generation steps, using GPTV4\cite{openai2023gpt4} and Python library pgmpy\cite{ankan2015pgmpy}, test image given is from \cite{fenton2018risk} }}
 		%\end{figure}
 		\end{center}
 		
 	    \section{Results}
 		\begin{itemize}
-			\item The Jupyter Notebook in Github shows the some of preliminary results related to the usage of simple Flood hazard anticipation and BN generation [4] 			
+			\item The Jupyter Notebook in Github shows the some of preliminary results related to the usage of simple Flood hazard anticipation and BN generation %\cite{Kalladath_How_do_Bayesian_2023}			
 			\item Study is ongoing to extend the application
 		\end{itemize}
 		%% Institution logo
 		%\includegraphics[width=\textwidth]{img/logo}\\
 		\section{Reference}
-		\begin{enumerate}
-		\item 
-		\item OpenAI. "GPT-4 Technical Report." arXiv e-prints, 2023, arXiv:2303.08774.
+		%\begin{enumerate}
+		%\item 
+		%\item OpenAI. "GPT-4 Technical Report." arXiv e-prints, 2023, arXiv:2303.08774.
 		%\item Ankan, Ankur, and Abinash Panda. 2015. [4]. 
 		%\item Ankan, Ankur, and Abinash Panda. 2015. [4] \LARGE{"pgmpy: Probabilistic graphical models using python." Proceedings of the 14th python in science conference (scipy 2015). Vol. 10. Citeseer, 2015.}
 		%\item \url{github.com/nishadhka/bn-ibf/code/01-simple-bn-flood.ipynb }
-		\renewcommand{\bibsection}{}                                                                                                                                                                                                                                                                                                                                                                                                                                            
+		\renewcommand{\bibsection}{}                                                                                                               
 		\bibliographystyle{plainnat} % or another suitable style like abbrvnat, unsrtnat, etc.
 		\bibliography{references} % if your file is named references.bib
 		
 		
-	    \end{enumerate}
-		\section{Authors: Nishadh K A, Viola Otieno, Jully Ouma, Collison Lorez, \& Ahmed Amdihun, ICPAC, Kenya}
+	    %\end{enumerate}
+		
 		%\author{Mike Morrison}
 		%\author{Rafael Bailo}
 		%\institution{Optional Institution Under Name}
