@@ -4,8 +4,17 @@
 
 \renewcommand{\maincolumnbackgroundcolor}{theory}
 \usepackage{caption}
+\captionsetup{
+	font=LARGE,       % set the font size to 'large' for both label and text
+	labelfont=LARGE   % set the font size to 'large' for the label
+}
 \usepackage[square,numbers]{natbib}
+%\usepackage[backend=biber, style=numeric, sorting=none]{biblatex}
 \renewcommand{\bibfont}{\huge}
+
+\usepackage{url}
+%\usepackage{hyperref}
+
 \begin{document}    
 	\betterposter{
 		%%%%%%%% SINGLE LEFT COLUMN (MERGED)
@@ -13,17 +22,19 @@
 		\title{How do Bayesian Networks support impact-based forecasting for informed decision-making?}
 		 \vspace{1em}%
 		\section{
-			\begin{minipage}[c]{0.08\textwidth}
+			\begin{minipage}[c]{0.07\textwidth}
 				\includegraphics[width=\linewidth]{img/logo2.png}
 			\end{minipage}%
 		    \hspace{0.5em}%
-			\begin{minipage}[c]{0.08\textwidth}
+			\begin{minipage}[c]{0.07\textwidth}
 				\includegraphics[width=\linewidth]{img/logo1.png}
 			\end{minipage}%
 		    \hspace{1em}%
 			\begin{minipage}[c]{0.9\textwidth}
-				Nishadh K A, Viola Otieno, Jully O. Ouma, Collison Lorez, \& Ahmed Amdihun
-				\\ IGAD Climate Prediction and Applications Centre- ICPAC, Nairobi, Kenya
+				\underline{Nishadh Kalladath$^{1}$}, Viola Otieno$^{1}$, Jully Ouma$^{1,2}$, Collison Lorez${^1}$, \& Ahmed Amdihun${^1}$
+				 \vspace{0.8em}%
+				\\${^1}$ IGAD Climate Prediction and Applications Centre- ICPAC, Nairobi, Kenya
+				\\${^2}$ United Nation Office for Disaster Risk Reduction, Africa Office, Kenya
 			\end{minipage}
 		}
 	    \vspace{1em}%
@@ -43,7 +54,7 @@
 		\begin{center}
 		%\begin{figure}[h!]	
 			\includegraphics[width=\textwidth]{img/BN-model-IBF-v2.png}
-			\captionof{figure}{\LARGE{BN generation steps, using GPTV4\cite{openai2023gpt4} and Python library pgmpy\cite{ankan2015pgmpy}, test image given is from \cite{fenton2018risk} }}
+			\captionof{figure}{\LARGE{BN generation steps, using GPT-4V\cite{openai2023gpt4} and Python library pgmpy\cite{ankan2015pgmpy}, test image given is from \citet{fenton2018risk} }}
 		%\end{figure}
 		\end{center}
 		
@@ -62,9 +73,9 @@
 		%\item Ankan, Ankur, and Abinash Panda. 2015. [4] \LARGE{"pgmpy: Probabilistic graphical models using python." Proceedings of the 14th python in science conference (scipy 2015). Vol. 10. Citeseer, 2015.}
 		%\item \url{github.com/nishadhka/bn-ibf/code/01-simple-bn-flood.ipynb }
 		\renewcommand{\bibsection}{}                                                                                                               
-		\bibliographystyle{plainnat} % or another suitable style like abbrvnat, unsrtnat, etc.
+		\bibliographystyle{unsrtnat} % or another suitable style like abbrvnat, unsrtnat, etc.
 		\bibliography{references} % if your file is named references.bib
-		
+		%\printbibliography
 		
 	    %\end{enumerate}
 		
@@ -77,14 +88,16 @@
 		\maincolumn{
 			%%%% Main space
 						
-		Current \textbf{IBF} practices inadequately address \textbf{uncertainty, diverse perspectives, and process transparency}, leading to a lack of \textbf{'skin in the game'}. Integrating \textbf{Bayesian Networks} coupled with \textbf{GPT-4V/LLM} could revolutionize IBF.
+		Current \textbf{IBF} practices inadequately address \textbf{uncertainty}, \textbf{diverse perspectives}, and \textbf{process transparency}, leading to a lack of \textbf{`skin in the game'\cite{taleb2018skin}}. Integrating \textbf{Bayesian Networks} coupled with \textbf{GPT-4V/LLM} could revolutionize IBF.
 			
 		}{
 			%%%% Bottom space
 			\qrcode{img/qrcode-bn}{img/smartphoneWhite}{
 				\textbf{Scan here} to proceed
 				\\Github repo project
-				\\nishadhka/bn-ibf
+				\\icpac-igad/bn-ibf
+				\\\textbf{For comments and questions}
+				\\icpac-igad/bn-ibf/issues
 			}
 		}
 		
