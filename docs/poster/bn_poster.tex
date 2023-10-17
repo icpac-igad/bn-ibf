@@ -41,27 +41,32 @@
 		\hrule
 		
 		\section{Introduction}
-		\begin{itemize}
-			\item Impact-based forecasting (IBF) aims to support risk-oriented decisions in disaster risk management by promoting anticipatory actions that minimize damage and loss of life from natural hazards.
-			\item IBF essentially uses risk matrices, which are products of the probability of impact and the extent of impact, represented as unconditional probabilities or impact numbers for events, like a flood event.
-			\item It fails to consider conditional factors, potential interventions, and critical questions, such as the likelihood of significant consequences under different actions \cite{fenton2018risk}.
-			\item Bayesian Network (BN) is a directed graphical model representing a set of variables and their conditional probabilistic dependencies.
-			
-		\end{itemize}
+	\begin{itemize}
+		\item Impact-based forecasting (IBF) is pivotal for disaster risk management. It empowers decisions that anticipate and reduce damage and loss of life from natural hazards.
+		\item IBF relies on risk matrices. These matrices evaluate probabilities or impact figures for specific events, such as floods. 
+		\item However, they often miss out on considering conditional elements, potential interventions, and essential scenarios, especially the probable outcomes of different actions \cite{fenton2018risk}.
+		\item Enter the Bayesian Network (BN): a directed graphical model that encapsulates variables and their conditional probabilistic interconnections.
+	\end{itemize}
+	
 		
 		\section{Methods}
-		\\ Method used for generating BN model, which can be extended with inputs and output applications for decision making.
+		\begin{itemize}
+			\item The figure \ref{fig1} illustrate the method for creating a BN model. This model can be broadened to include inputs and applications crucial for decision-making.
+			\item The presented BN model leverages insights from GPT-4V using the Python library pgmpy.
+		\end{itemize}
 		\begin{center}
-		%\begin{figure}[h!]	
+			%\begin{figure}[h!]	
 			\includegraphics[width=\textwidth]{img/BN-model-IBF-v2.png}
-			\captionof{figure}{\LARGE{BN generation steps, using GPT-4V\cite{openai2023gpt4} and Python library pgmpy\cite{ankan2015pgmpy}, test image given is from \citet{fenton2018risk} }}
-		%\end{figure}
+			\captionof{figure}{Steps for BN generation using GPT-4V\cite{openai2023gpt4} and the Python library pgmpy\cite{ankan2015pgmpy}. The test image is adapted from \citet{fenton2018risk}.}
+			\label{fig1}
+			%\end{figure}
 		\end{center}
+		
 		
 	    \section{Results}
 		\begin{itemize}
-			\item The Jupyter Notebook in Github shows the some of preliminary results related to the usage of simple Flood hazard anticipation and BN generation %\cite{Kalladath_How_do_Bayesian_2023}			
-			\item Study is ongoing to extend the application
+			\item Our Jupyter Notebook on GitHub provides preliminary findings on using BN for carry out analysis for antciaptory action against flood hazards. 
+			\item We are expanding the study to widen the applications of our findings.
 		\end{itemize}
 		%% Institution logo
 		%\includegraphics[width=\textwidth]{img/logo}\\
@@ -88,7 +93,7 @@
 		\maincolumn{
 			%%%% Main space
 						
-		Current IBF practices have shortcomings. They often fail to address critical factors such as uncertainty, diverse perspectives, and process transparency. This oversight results in a lack of 'skin in the game'\cite{taleb2018skin}. By integrating Bayesian Networks and GPT-4V, we believe there's potential to bring significant advancements to IBF.
+		Current IBF practices, lacking in addressing uncertainty, diverse views, and transparency, miss the 'skin in the game'\cite{taleb2018skin}. Integrating Bayesian Networks with GPT-4V/LLM could enhance IBF
 			
 		}{
 			%%%% Bottom space
