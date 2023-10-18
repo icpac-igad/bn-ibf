@@ -42,32 +42,32 @@
 		
 		\section{Introduction}
 	\begin{itemize}
-		\item Impact-based forecasting (IBF) plays a crucial role in disaster risk management by facilitating anticipatory decisions that aim to mitigate damage and loss of life from natural hazards.
-		\item Central to IBF are risk matrices, which quantify probabilities or the impact magnitudes for events like floods.
-		\item Yet, these matrices often overlook conditional factors, potential interventions, and the implications of various actions \cite{fenton2018risk}. Moreover, for IBF to be more effective as a tool for reasoning under uncertainty, it requires enhanced instruments to assist it \cite{geist2022reasoning}.
-		\item The Bayesian Network \cite{judea2003bn}, a graphical representation of relationships among a set of variables provide a structured way to reason about uncertain phenomena using probabilities. This study explores its application in IBF.  
+		\item Impact-based forecasting (IBF) guides proactive decisions in disaster risk management to reduce damages and casualties from hydro-meteorological events.
+		\item Integral to IBF are risk matrices, which evaluate impact probabilities and magnitudes.
+		%for events such as floods.
+		\item These matrices frequently overlook conditional elements, potential interventions, and the consequences of varied actions \cite{fenton2018risk}. To enhance IBF's efficacy as a tool for reasoning under uncertainty, better tools are essential \cite{geist2022reasoning}.
+		\item The Bayesian Network \cite{judea2003bn}, representing the interrelations of a set of variables graphically, offers a systematic approach to probabilistic reasoning about uncertainty. This study explores its implementation within IBF.
 	\end{itemize}
 		\section{Methods}
 		\begin{itemize}
-			\item The figure \ref{fig1} illustrate the method for creating a BN model for a given mindmap on flood hazard anticipatory action. 
-			\item The method leverages insights from GPT-4V at chatGPT web application for BN model generation by Python library pgmpy.
+			\item The figure illustrate the method for creating a BN model for a mind map on flood hazard anticipatory action. Uses  GPT-4V\cite{openai2023gpt4} thorugh ChatGPT web application for BN model generation and compute for decision making by Python library pyAgrum\cite{hal-03135721}.
 		\end{itemize}
 		\begin{center}
 			%\begin{figure}[h!]	
-			\includegraphics[width=\textwidth]{img/BN-model-IBF-v3.png}
-			\captionof{figure}{Steps for BN generation using GPT-4V\cite{openai2023gpt4} and the Python library pgmpy\cite{ankan2015pgmpy}. The test image is adapted from \citet{fenton2018risk}.}
+			\includegraphics[width=\textwidth]{img/BN-model-IBF-v4.png}
+			\captionof{figure}{Steps for BN generation. The test mind map is adapted from \citet{fenton2018risk}.}
 			\label{fig1}
 			%\end{figure}
 		\end{center}
 		
 		
-	    \section{Results}
+	    \section{Result}
 		\begin{itemize}
-			\item Preliminary findings shows the application of BN with the use of chatGPT and generated model for to carry out risk analysis for antciaptory action against flood hazards. This model can be broadened to include IBF inputs and applications crucial for decision-making.
+			\item The study highlights the application of BN within IBF, leveraging ChatGPT to produce a BN model for risk analysis in anticipatory action against flood hazards. This methodology can be further refined to integrate essential IBF inputs and tools for informed decision-making.
 		\end{itemize}
 		%% Institution logo
 		%\includegraphics[width=\textwidth]{img/logo}\\
-		\section{Reference}
+		\section{References}
 		%\begin{enumerate}
 		%\item 
 		%\item OpenAI. "GPT-4 Technical Report." arXiv e-prints, 2023, arXiv:2303.08774.
@@ -90,7 +90,7 @@
 		\maincolumn{
 			%%%% Main space
 						
-		Current IBF practices, lacking in addressing uncertainty, diverse views, and transparency, miss the 'skin in the game'\cite{taleb2018skin}. Integrating Bayesian Networks with GPT-4V could enhance IBF.
+		\textbf{Current IBF} practices, lacking in addressing \textbf{uncertainty}, \textbf{diverse views}, and \textbf{transparency}, miss the \textbf{`skin in the game'\cite{taleb2018skin}}. Integrating \textbf{Bayesian Networks} with \textbf{GPT-4V/ChatGPT} could enhance \textbf{IBF}.
 			
 		}{
 			%%%% Bottom space
