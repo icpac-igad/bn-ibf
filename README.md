@@ -118,8 +118,8 @@ gnb.showBN(bn)
 ```
 ## Prompt for adding conditional probablity to the BN based on a hypothetical flood case
 
-<p align="center">
-  <img src="docs/prompt2.png width="30%" />
+<<p align="center">
+  <img src="docs/prompt2.png" width="100%" />
 </p>
 
 
