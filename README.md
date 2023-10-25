@@ -116,6 +116,10 @@ for f in [0,1]:  # flood
 
 gnb.showBN(bn)
 ```
+## Prompt for adding conditional probablity to the BN based on a hypothetical flood case
+
+
+
 ## Samples on using the BN model to ask certain decision making questions
 ### 1. Decision Making: Prioritizing Investments in Flood Infrastructure
 Suppose Nairobi city officials want to determine the best investment to reduce flood risk. They can do this by comparing the probabilities of flooding under different scenarios.
