@@ -128,39 +128,20 @@ the drought kind,
 where  $\sigma\in\{\text{MAM, JJAS}\}$\footnote{Letters here stand for the first letter of the months of the year.} is the season, and $\delta\in\{\text{Moderate, Extreme, Severe}\}$
 is the drought degree.
 
-$I_\kappa=$ {\bf Impact } (i.e., {\bf severity}) of drought is defined as minus SPI (higher rain,
+$S_\kappa=$ {\bf Severity } of drought is defined as minus SPI (higher rain,
 higher SPI, less 
-severe drought)
+severe drought). 
+For flood (FAA), we would
+use $+SPI$ instead.
 
-$ P(I_\kappa)=$ likelihood, 
-probability  that a drought of severity $I_\kappa$  will occur in the near future (weeks to months), based on forecasts.
+$ P(S_\kappa)=$ likelihood, 
+probability  that a drought of severity $S_\kappa$  will occur in the near future (weeks to months), based on forecasts.
 
 $\mu=$ ensemble member index
 
 $M=$ number of ensemble members, 51 for $ECMWF$ (European Centre for Medium-Range Weather Forecasts)
 
 
-\beqa
-Risk_\kappa &=& E[\rvI_\kappa] = \frac{1}{M} \sum_{\mu=1}^{M} I_{\kappa,\mu}
-\\
-&=&\sum_{I_\kappa} P(I_\kappa) I_\kappa
-\eeqa
-
-A {\bf risk matrix} is
-a  $4\times 4$ matrix
-with $X$ axis 
-equal to impact ($I$)
-and $Y$ axis equal to likelihood
-$P$, with 
-$I$ binned into four values
-and $P$ binned into 4 values.
-The matrix elements give
-the value of
-some arbitrary function 
-$f(I, P)$ defined as risk. Usually, $f(I, P)=IP$ but not necessarily. I find 
-risk matrices arbitrary
-and not very useful. The 
-Wikipedia article on risk matrices (Ref.\cite{wiki-risk-matrix}) agrees.
 
 \begin{table}[!h]
 \begin{tabular}{|l|l|l|l|}
@@ -170,23 +151,23 @@ $\sigma\backslash\delta$ & \cellcolor[HTML]{FFFFC7}Moderate & \cellcolor[HTML]{F
 \cellcolor[HTML]{FFFFC7}JJAS & $-$0.41 & $-$0.98 & $-$0.99 \\ \hline
 \end{tabular}
 \caption{SPI threshold  for Karamoja, Uganda.
-Cells give $-I^*_\kappa$,
+Cells give $-S^*_\kappa$,
 where $\kappa=(\sigma, \delta)$}
 \label{tab-spi-karamoja}
 \end{table}
 
-$I_\kappa^*  =$ impact threshold 
+$S_\kappa^*  =$ severity threshold 
    for drought (See Table
    \ref{tab-spi-karamoja}
    for examples
-   of $I^*_\kappa$.)
+   of $S^*_\kappa$.)
    
 
 \beq
-P(\rvI_\kappa\geq I_\kappa^*  ) = \frac{1}{M} \sum_{\mu=1}^{M} \indi(I_{\kappa,\mu} \geq I_\kappa^*) 
+P(\rvS_\kappa\geq S_\kappa^*  ) = \frac{1}{M} \sum_{\mu=1}^{M} \indi(S^{\kappa,\mu} \geq S_\kappa^*) 
 \eeq
 
-Let $X^i_\kappa\in \bool$ for $i=1,2, 3, \ldots, nx$ represent vulnerability to local problems
+Let $X^i_\kappa\in \bool$ for $i=1,2, 3, \ldots, nx$ represent a flag for local problems
 such as high road density, high population density,
 historical 
 catastrophic events, etc.
@@ -196,7 +177,7 @@ Let
 
 %\beq
 %N_\kappa = \sum_{i=1}^{nx}
-%X^i_\kappa
+%X^S_\kappa
 %\eeq
 
 $\eps \in \RR$ be a normally distributed random variable
@@ -205,9 +186,9 @@ some a priori
 given deviation.
 
 $RC_\kappa^i=$ replacement cost for 
-vulnerability $X^i_\kappa$
+flag $X^i_\kappa$
 
-$IC_\kappa^i=$  insurance (i.e., preventive) cost for vulnerability $X^i_\kappa$
+$IC_\kappa^i=$  insurance (i.e., preventive) cost for flag $X^i_\kappa$
 
 
 Note that insurance always costs
@@ -218,7 +199,7 @@ more than replacement, so
 \eeq
 
 $P_{danger, \kappa}^i=
-\frac{IC_\kappa^i}{RC_\kappa^i}$ probability of danger for Vulnerability $X_\kappa^i$.
+\frac{IC_\kappa^i}{RC_\kappa^i}$ probability of danger for flag $X_\kappa^i$.
 
 Note that less 
 danger 
@@ -254,7 +235,7 @@ $P^*_\kappa=$ threshold probability that triggers a  drought warning
 
 \beq
 TD_\kappa=
-\indi\left[P(\rvI_\kappa\geq I_\kappa^*  ) > P^*_\kappa\right]
+\indi\left[P(\rvS_\kappa\geq S_\kappa^*  ) > P^*_\kappa\right]
 \eeq
 
 
@@ -266,7 +247,7 @@ $$
 &\rvX^2_\kappa \ar[d]
 &\rvX^3_\kappa\ar[dl]
 \\
-\rvP(\rvI_\kappa> I^*_\kappa)\ar[d] 
+\rvP(\rvS_\kappa> S^*_\kappa)\ar[d] 
 & \rvP^*_\kappa\ar[dl]
 &\rv{\eps}\ar[l]
 \\
@@ -316,7 +297,7 @@ f_\kappa(X^1_\kappa, X^2_\kappa,
 TD_\kappa
 =
 \indi[
-P(\rvI_\kappa>I^*_\kappa) >P^*_\kappa]
+P(\rvS_\kappa>S^*_\kappa) >P^*_\kappa]
 \eeq
 
 \beq\color{blue}
@@ -335,7 +316,7 @@ PyAgrum
 (Ref.\cite{pyagrum}).
 Enter into software available
 evidence for
-nodes $P(\rvI_\kappa> I^*_\kappa)$, $(X^1, X^2, X^3)$
+nodes $P(\rvS_\kappa> S^*_\kappa)$, $(X^1, X^2, X^3)$
 and $(Y_\kappa^1, Y_\kappa^2,Y_\kappa^3)$.
 Allow software
 to
@@ -349,6 +330,61 @@ with maximum
 probability. 
 \end{mdframed}
 
+\section{Relation to Climada}
+
+This project used the Climada (see Ref.\cite{climada}) software library.
+Table \ref{tab-climata} relates their 
+terminology to ours.
+
+In Climada, a hazard model 
+yields the intensity
+for a particular event.
+
+
+\begin{table}[h!]
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor[HTML]{FFFFC7} 
+Climata terminology & Our terminology \\ \hline
+Intensity of event & $S$=severity of event  \\ \hline
+Vulnerability=
+$\frac{Impact}{Exposure}$ & $P_{danger}= \frac{IC}{RC}$=danger probability \\ \hline
+Impact & $IC$= insurance cost (\$) \\ \hline
+Exposure & $RC$=replacement cost (\$) \\ \hline
+\end{tabular}
+\caption{Relationship between Climata terminology and ours}
+\label{tab-climata}
+\end{table}
+
+Climada takes as 
+input the intensity of an
+event, and calculates from this the event's
+vulnerability, impact and exposure.
+In this
+project, we use Climada for each flag $X^i$.
+
+\section{Risk}
+\beqa
+Risk_\kappa &=& E[\rv{IC}_\kappa] = \frac{1}{M} \sum_{\mu=1}^{M} IC^{\kappa,\mu}
+\\
+&=&\sum_{IC_\kappa} P(IC_\kappa) IC_\kappa
+\eeqa
+
+A {\bf risk matrix} is
+a  $4\times 4$ matrix
+with $X$ axis 
+equal to insurance cost ($IC$) (a.k.a. impact)
+and $Y$ axis equal to likelihood
+$P$, with 
+$IC$ binned into four values
+and $P$ binned into 4 values.
+The matrix elements give
+the value of
+some arbitrary function 
+$f(IC, P)$ defined as risk. Usually, $f(IC, P)=IC*P$ but not necessarily. I find 
+risk matrices arbitrary
+and not very useful. The 
+Wikipedia article on risk matrices (Ref.\cite{wiki-risk-matrix}) agrees.
 
 
 \appendix 
