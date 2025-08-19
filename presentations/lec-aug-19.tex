@@ -1,0 +1,183 @@
+\documentclass{beamer}
+
+\usetheme {Madrid}
+
+\input{my_beamer.sty}
+
+\definecolor{myred}{RGB}{153, 18, 2}
+\setbeamercolor{structure}{fg=myred}
+
+\title{Determination of Drought Triggering Probability \\via Bayesian Network}
+\author{Robert R. Tucci}
+\institute{ICPAC, www.ar-tiste.xyz}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Links}
+
+
+{\bf Repo} at
+{\tiny \url{https://github.com/nishadhka/bn-ibf-e4drr} }
+
+Includes
+\begin{itemize}
+\item python code (well documented with plenty of docstrings)
+\item folder entitled {\tt jupyter\_notebooks} with 3 jupyter notebooks
+\item folder entitled {\tt white-paper} with latex code and PDF for {\bf preliminary} white-paper 
+
+{\tiny \url{https://github.com/nishadhka/bn-ibf-e4drr/blob/main/white-paper/anticipatory-action.pdf}}
+\end{itemize}
+
+I would appreciate it if you would take a look at the code and read the white paper. Comments from {\color{red} why did you do this instead of that}, or {\color{red} I think this part is wrong, or BS or too technical or unnecessary or obscure} are welcomed and I will attempt to address them.
+\end{frame}
+
+\begin{frame}{Brief review of Tim Palmer ECMWF Theory}
+
+\begin{description}
+\item[$I^*  =$] impact threshold 
+   for drought, it equals minus an SPI (Standardized Precipitation Index)
+   
+\item[$\mu=$] ensemble member index
+
+\item[$M=$] number of ensemble members, 51 for $ECMWF$
+
+\item[$\indi()=$] indicator function. $\indi(a>b)$
+equals 1 if $a>b$ and is zero otherwise
+
+\item[$TD=$] triggering decision to do drought warning
+\item[$P^*=$] threshold probability that triggers a  drought warning
+
+\end{description}
+
+$$
+\underbrace{P(\rvI\geq I^*  )}_{
+\text{probability that impact is greater than threshold $I^*$}}= \frac{1}{M} \sum_{\mu=1}^{M} \indi(I_{\mu} \geq I^*) 
+$$
+
+
+
+$$
+TD=
+\indi\left[P(\rvI\geq I^*  ) > P^*\right]
+$$
+\end{frame}
+
+\begin{frame}{Problem to solve}
+
+Find an automatic method of determining triggering
+ probability $P^*$. 
+ \begin{itemize}
+
+ \item The new method should be better than Nishadh's method of doing this for Karamoja, The latter is based solely on FAR/HR/AUROC. 
+ 
+ \item The new method should take
+ into account {\bf antecedents} like population density, road density, historical catastrophes, soil moisture, etc.
+ \end{itemize}
+
+\end{frame}
+
+\begin{frame}{Bnet for determining triggering 
+probability $P^*$}
+
+\begin{itemize}
+\item {\bf bnet (Bayesian network)}, discussed in my free,
+open source book 
+{\tiny \url{https://github.com/rrtucci/Bayesuvius/raw/master/main.pdf}}
+\item I do bnet calculations using {\bf Pyagrum} software at {\tiny \url{https://pyagrum.readthedocs.io/en/}} combined with a small amount of auxiliary 
+code that I wrote.
+\end{itemize}
+
+
+$$
+\xymatrix{
+\rvX^1 \ar[dr]
+&\rvX^2 \ar[d]
+&\rvX^3\ar[dl]
+\\
+\rvP(\rvI> I^*)\ar[d] 
+& \rvP^*\ar[dl]
+&\rv{\eps}\ar[l]
+\\
+\rv{TD}
+\ar[d]\ar[dr]\ar[drr]
+\\
+\ul{FAR} 
+&\ul{HR}
+&\ul{AUROC}
+}
+\begin{array}{l}
+\text{$\rvX^1, \rvX^2, \rvX^3$ are antecedents}
+\\
+\text{$\rv{\eps}$ is noise}
+\end{array}
+$$
+
+
+\end{frame}
+
+\begin{frame}{Use of Climada to find $P^*$}
+
+This project will use the Climada
+
+{\tiny \url{https://github.com/CLIMADA-project/climada_python}} 
+
+software library.
+Table below relates their 
+terminology to ours.
+
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor[HTML]{FFFFC7} 
+Climada terminology & Our terminology \\ \hline
+Intensity of event & $S$=severity of event  \\ \hline
+Vulnerability=
+$\frac{Impact}{Exposure}$ & $P_{danger}= \frac{IC}{RC}$=danger probability \\ \hline
+Impact & $IC$= insurance cost (\$) \\ \hline
+Exposure & $RC$=replacement cost (\$) \\ \hline
+\end{tabular}
+
+In Climada, a hazard model 
+yields the intensity
+for a particular event.
+Climada takes as 
+input the intensity of an
+event, and calculates from this the event's
+vulnerability, impact and exposure.
+In this
+project, we use Climada for each flag $X^i\in\bool$.
+
+$$
+P^* =
+=
+1 -
+\max_i\{P^i_{danger}
+X_\kappa^i\}
+$$
+
+\end{frame}
+
+\begin{frame}{Much Still to Do}
+
+{\color{red} Need Help}
+
+\begin{itemize}
+\item {\bf Need real data to train bnet. 
+} So far, I've only used synthetic  data to train it. 
+
+\item Need to do a lot of work {\bf fine tuning} and
+{\bf integrating} 
+this software with full corpus of DAA 
+(Drought Anticipatory Action) software
+
+\item Need to do {\bf modelling of 
+antecedent  probabilities}. This requires real data, which I haven't gotten yet.
+
+\end{itemize}
+
+\end{frame}
+
+\end{document}
