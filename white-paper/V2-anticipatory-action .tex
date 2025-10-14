@@ -1,7 +1,7 @@
 \documentclass[12pt]{article}
 \input{bayesuvius.sty}
 \usepackage{authblk}
-\title{Drought or Flood Warning Decision\\ made based on Bayesian Network}
+\title{Drought or Flood Warning Decision\\ made via Damage functions and Bayesian Network}
 \author[1]{Nishadh Kalladath}
 \author[1]{Hillary Koros}
 \author[1,2]{Robert R. Tucci}
@@ -12,7 +12,7 @@
 \abstract{xxx}
 \section{Introduction}
 
-{\bf Drought Anticipatory Action} (DAA)
+{\bf Drought/Flood Anticipatory Action} (DFAA)
 
 bnet (Bayesian network) (see Ref.\cite{Bayesuvius})
 
@@ -26,7 +26,7 @@ from Tim Palmer's book Ref.\cite{palmer-book}}
 \label{fig-tim-palmer-cartoon}
 \end{figure}
 
-Bring the following disaster prediction models together via
+Bring the following DFAA models together via
 Damage Functions
 
 \begin{enumerate}[(a)]
@@ -51,7 +51,7 @@ function
 $\indi(S)$ equals 1 if statement $S$ is true,
 and 0 if $S$ is false.
 For example, $\indi(x\geq 0)$
-equals 0 if $x<0$ and 1 otherwise.
+equals 1 if $x\geq 0$ and 0 otherwise.
 
 In this article, random variables will
 be indicated by underlining.
@@ -68,13 +68,13 @@ is greater than $x$.
 $\alp=$ index that ranges over different hazards
 
 
-$f_\alp(x_\alp)=$ {\bf Damage Fraction} (term used in Ref.\cite{huizinga}), {\bf Impact Function} (term used in Ref.\cite{climada}) for Hazard $\alp$.
+$f_\alp(x_\alp)=$ {\bf Damage Fraction} (term used in Ref.\cite{huizinga}), {\bf Impact Function} (term used in Ref.\cite{climada}) for hazard $\alp$.
 $f_\alp(x_\alp)$ is a function of the
 parameter $x_\alp$, and increases monotonically
 from $0$ when $x_\alp=0$ to $1$ when 
 $x_\alp$ is maximum, $x_\alp=x_{\alp, max}$
 
-$D_{\alp, max}=$ {\bf Maximum Damage} (term used in Ref.\cite{huizinga}), {\bf Exposure} (term used in Ref.\cite{climada}) for Hazard $\alp$. In dollars.  
+$D_{\alp, max}=$ {\bf Maximum Damage} (term used in Ref.\cite{huizinga}), {\bf Exposure} (term used in Ref.\cite{climada}) for hazard $\alp$. In dollars.  
 
 Henceforth,
 anything called a Damage will
@@ -96,7 +96,7 @@ $\ol{D}_\alp=$ {\bf Average Damage}
 
 $D_{max}=$ {\bf maximum total damage}  that 
 is  tolerable. 
-Any time total Damage is higher than this, always issue drought warning.
+If total Damage is higher than this, issue drought or flood warning.
 
 We will use $x_\alp={\tt None}$ to indicate
 
@@ -105,8 +105,9 @@ D_\alp(x_\alp={\tt None}) = \ol{D}_\alp
 \eeq
 
 
-When $x_\alp\neq  {\tt None}$, $x_\alp$ should be the
-value of $x_\alp$ for some historical event or a bin value.
+In general, 
+
+$$x_\alp\in val(x_\alp)=\{ {\tt None}, \text{$x_\alp$ for historical events}, \text{bin values of $x_\alp$}\}$$
 
 $\eps_\alp=$ {\bf error} in $D_\alp$,
 normally distributed with mean zero
@@ -135,9 +136,9 @@ D'_\alp(x_\alp)&
 Let
 
 $\kappa=(\sigma, \delta)=$
-the drought kind, 
+the drought/flood kind, 
 where  $\sigma\in\{\text{MAM, JJAS}\}$\footnote{Letters here stand for the first letter of the months of the year.} is the season, and $\delta\in\{\text{Moderate, Extreme, Severe}\}$
-is the drought degree.
+is the drought/flood degree.
 
 $S_\kappa=$ {\bf Severity } of drought is defined as minus SPI\footnote{{\bf Standardized Precipitation Index} (SPI) ranges from $-4$ (least rain) to $4$ (most rain).} (higher rain,
 higher SPI, less 
@@ -183,8 +184,8 @@ P(\rvS_\kappa\geq S_\kappa^*  ) = \frac{1}{M} \sum_{\mu=1}^{M} \indi(S^{\kappa,\
 $W_\kappa=$ {\bf drought warning}, either 0 or 1
 
 $f_{D, \kappa}=$ the total damage fraction $f_D$ defined
-previously, for drought kind $\kappa$. We 
-will use this as a threshold for triggering  a  drought warning.
+previously, for drought/flood kind $\kappa$. We 
+will use this as a threshold for triggering  a  drought/flood warning.
 
 
 
@@ -216,8 +217,8 @@ $$
 \xymatrix{
 \rvx_{\alp_1} \ar[d]
 & \rveps_{\alp_1}\ar[ld]
-&\rvx_{\alp_1} \ar[d]
-& \rveps_{\alp_1}\ar[ld]
+&\rvx_{\alp_2} \ar[d]
+& \rveps_{\alp_2}\ar[ld]
 \\
 \rvD'_{\alp_1}(x_{\alp_1})\ar[d]
 &&\rvD'_{\alp_2}(x_{\alp_2})\ar[dll]
