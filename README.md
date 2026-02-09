@@ -1,6 +1,6 @@
 # Welcome to jua-bnet
 
-jua = "know" or "aware" in Swahili, the main African language of Central Africa
+jua = "know" or "aware" in Swahili
 
 bnet, bn = Bayesian Network
 
