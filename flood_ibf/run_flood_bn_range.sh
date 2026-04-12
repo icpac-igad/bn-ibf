@@ -40,7 +40,8 @@ while [[ "$D" < "$(date -I -d "$END_DATE + 1 day")" ]]; do
   julia --project=. flood_bn_ibf_v1.jl \
       --input-csv "$IN_CSV" \
       --output-csv "$OUT_CSV" \
-      --no-agreement
+      --no-agreement \
+      --tail-risk
 
   D="$(date -I -d "$D + 1 day")"
 done

@@ -39,6 +39,7 @@ const EXCEEDANCE_STATES = ["Very_Low", "Low", "Medium", "High", "Very_High"]  # 
 const SPATIAL_STATES    = ["Localized", "Moderate", "Widespread"]             # 3
 const TREND_STATES      = ["Decreasing", "Stable", "Increasing"]             # 3
 const AGREEMENT_STATES  = ["Low", "Medium", "High"]                          # 3
+const TAIL_RISK_STATES  = ["None", "Low", "Moderate", "High"]                # 4
 const RISK_STATES       = ["Minimal", "Low", "Moderate", "High", "Extreme"]  # 5
 const ACTION_STATES     = ["Monitor", "Alert", "Prepare", "Act"]             # 4
 
@@ -119,13 +120,26 @@ function categorize_agreement(agreement::String)::Int
     return 2  # Medium
 end
 
+"""
+Categorize ensemble-max / threshold ratio into tail-risk index (1-4).
+Captures whether any single ensemble member exceeds the RP threshold.
+"""
+function categorize_tail_risk(max_ratio::Float64)::Int
+    isnan(max_ratio) && return 1
+    max_ratio < 0.5 && return 1  # None — well below threshold
+    max_ratio < 1.0 && return 2  # Low — approaching threshold
+    max_ratio < 2.0 && return 3  # Moderate — at least 1 member exceeds
+    return 4  # High — member well above threshold (≥ 2× RP)
+end
+
 # ============================================================================
 # CPT CONSTRUCTION (mirrors _compute_risk_probs from Python)
 # ============================================================================
 
 """
 Compute risk probability vector [5] given parent state indices.
-Mirrors FloodBayesianNetworkV1._compute_risk_probs exactly.
+Extends the original expert rules with a tail_risk node that captures
+whether any single ensemble member exceeds the RP threshold.
 """
 function compute_risk_probs(
     antecedent::Int,  # 1-5
@@ -133,6 +147,7 @@ function compute_risk_probs(
     spatial::Int,     # 1-3
     trend::Int,       # 1-3
     agreement::Int,   # 1-3
+    tail::Int=1,      # 1-4 (None, Low, Moderate, High)
 )::Vector{Float64}
     # Convert to 0-based for the arithmetic (matching Python)
     a = antecedent - 1
@@ -140,6 +155,7 @@ function compute_risk_probs(
     s = spatial - 1
     t = trend - 1
     ag = agreement - 1
+    tr = tail - 1
 
     # Base risk score
     base_risk = a * 0.30 + e * 0.55
@@ -158,6 +174,16 @@ function compute_risk_probs(
         base_risk -= 0.30
     end
 
+    # Tail risk modifier: boost risk when ensemble max exceeds threshold
+    # even if mean exceedance probability is low
+    if tr == 3       # High: ens_max ≥ 2× threshold
+        base_risk += 0.60
+    elseif tr == 2   # Moderate: ens_max exceeds threshold (1-2×)
+        base_risk += 0.35
+    elseif tr == 1   # Low: approaching threshold (0.5-1.0×)
+        base_risk += 0.10
+    end
+
     # Expert rules for specific scenarios
     probs = if a == 4 && e >= 3 && t == 2
         # Rule 1: Saturated + High/Very_High + Increasing
@@ -169,11 +195,24 @@ function compute_risk_probs(
     elseif a >= 3 && e >= 3 && t == 2
         # Rule 2: Very_Wet/Saturated + High + Increasing
         [0.0, 0.0, 0.10, 0.50, 0.40]
-    elseif a == 0 && e <= 2
-        # Rule 3: Dry + low forecast
+    # Rule T1: Low mean exceedance BUT high tail risk + wet/saturated ground
+    elseif tr >= 2 && a >= 3 && e <= 2
+        if tr == 3  # High tail risk
+            [0.0, 0.10, 0.30, 0.45, 0.15]
+        else        # Moderate tail risk
+            [0.05, 0.20, 0.45, 0.25, 0.05]
+        end
+    # Rule T2: Low mean exceedance BUT high tail risk (any antecedent)
+    elseif tr == 3 && e <= 1
+        [0.05, 0.20, 0.40, 0.30, 0.05]
+    # Rule T3: Moderate tail risk + increasing trend
+    elseif tr >= 2 && t == 2 && e <= 2
+        [0.05, 0.15, 0.45, 0.30, 0.05]
+    elseif a == 0 && e <= 2 && tr <= 1
+        # Rule 3: Dry + low forecast + no tail risk
         [0.55, 0.35, 0.10, 0.0, 0.0]
-    elseif t == 0 && a <= 2 && e <= 1
-        # Rule 4: Decreasing + low antecedent
+    elseif t == 0 && a <= 2 && e <= 1 && tr <= 1
+        # Rule 4: Decreasing + low antecedent + no tail risk
         [0.65, 0.30, 0.05, 0.0, 0.0]
     elseif a <= 1 && e >= 3
         # Rule 5: High forecast but dry
@@ -212,40 +251,43 @@ and build a (5 × N_combos) matrix.
 
 Returns: (risk_tensor, n_combos)
 """
-function build_risk_cpt(; include_agreement::Bool=true)
-    if include_agreement
-        n_combos = 5 * 5 * 3 * 3 * 3  # 675
+function build_risk_cpt(; include_agreement::Bool=true, include_tail_risk::Bool=false)
+    if include_tail_risk
+        if include_agreement
+            n_combos = 5 * 5 * 3 * 3 * 3 * 4  # 2700
+        else
+            n_combos = 5 * 5 * 3 * 3 * 4      # 900
+        end
     else
-        n_combos = 5 * 5 * 3 * 3      # 225
+        if include_agreement
+            n_combos = 5 * 5 * 3 * 3 * 3  # 675
+        else
+            n_combos = 5 * 5 * 3 * 3      # 225
+        end
     end
 
-    # Matrix: rows = risk states (5), cols = parent combos
     cpt = zeros(Float64, 5, n_combos)
     idx = 0
 
-    if include_agreement
-        for ag in 1:3
-            for tr in 1:3
-                for sp in 1:3
-                    for ex in 1:5
-                        for ant in 1:5
-                            idx += 1
-                            cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, ag)
-                        end
-                    end
-                end
-            end
+    if include_tail_risk && include_agreement
+        for tl in 1:4, ag in 1:3, tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            idx += 1
+            cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, ag, tl)
+        end
+    elseif include_tail_risk
+        for tl in 1:4, tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            idx += 1
+            cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, 3, tl)
+        end
+    elseif include_agreement
+        for ag in 1:3, tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            idx += 1
+            cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, ag, 1)
         end
     else
-        for tr in 1:3
-            for sp in 1:3
-                for ex in 1:5
-                    for ant in 1:5
-                        idx += 1
-                        cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, 3)
-                    end
-                end
-            end
+        for tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            idx += 1
+            cpt[:, idx] = compute_risk_probs(ant, ex, sp, tr, 3, 1)
         end
     end
 
@@ -288,21 +330,40 @@ NOTE: RxInfer's DiscreteTransition(y, x, T) means:
 Encode multiple discrete parent indices into a single flat index (1-based).
 Used to collapse 5 parents into one "super-parent" for DiscreteTransition.
 """
-function encode_parents(ant::Int, exc::Int, spa::Int, tre::Int, agr::Int)::Int
-    # Must match the iteration order in build_risk_cpt
-    # Order: agreement(outer) > trend > spatial > exceedance > antecedent(inner)
-    return ((agr - 1) * 3 * 3 * 5 * 5 +
-            (tre - 1) * 3 * 5 * 5 +
-            (spa - 1) * 5 * 5 +
-            (exc - 1) * 5 +
-            (ant - 1)) + 1
+function encode_parents(ant::Int, exc::Int, spa::Int, tre::Int, agr::Int;
+                        tail::Int=1, include_tail_risk::Bool=false)::Int
+    if include_tail_risk
+        # Order: tail(outer) > agreement > trend > spatial > exceedance > antecedent(inner)
+        return ((tail - 1) * 3 * 3 * 3 * 5 * 5 +
+                (agr - 1) * 3 * 3 * 5 * 5 +
+                (tre - 1) * 3 * 5 * 5 +
+                (spa - 1) * 5 * 5 +
+                (exc - 1) * 5 +
+                (ant - 1)) + 1
+    else
+        return ((agr - 1) * 3 * 3 * 5 * 5 +
+                (tre - 1) * 3 * 5 * 5 +
+                (spa - 1) * 5 * 5 +
+                (exc - 1) * 5 +
+                (ant - 1)) + 1
+    end
 end
 
-function encode_parents_no_agreement(ant::Int, exc::Int, spa::Int, tre::Int)::Int
-    return ((tre - 1) * 3 * 5 * 5 +
-            (spa - 1) * 5 * 5 +
-            (exc - 1) * 5 +
-            (ant - 1)) + 1
+function encode_parents_no_agreement(ant::Int, exc::Int, spa::Int, tre::Int;
+                                     tail::Int=1, include_tail_risk::Bool=false)::Int
+    if include_tail_risk
+        # Order: tail(outer) > trend > spatial > exceedance > antecedent(inner)
+        return ((tail - 1) * 3 * 3 * 5 * 5 +
+                (tre - 1) * 3 * 5 * 5 +
+                (spa - 1) * 5 * 5 +
+                (exc - 1) * 5 +
+                (ant - 1)) + 1
+    else
+        return ((tre - 1) * 3 * 5 * 5 +
+                (spa - 1) * 5 * 5 +
+                (exc - 1) * 5 +
+                (ant - 1)) + 1
+    end
 end
 
 # ============================================================================
@@ -335,12 +396,15 @@ function infer_direct(
     risk_cpt::Matrix{Float64},
     action_cpt::Matrix{Float64};
     include_agreement::Bool=true,
+    tail_risk_idx::Int=1,
+    include_tail_risk::Bool=false,
 )
-    # Encode parent combination
     parent_idx = if include_agreement
-        encode_parents(antecedent_idx, exceedance_idx, spatial_idx, trend_idx, agreement_idx)
+        encode_parents(antecedent_idx, exceedance_idx, spatial_idx, trend_idx, agreement_idx;
+                        tail=tail_risk_idx, include_tail_risk)
     else
-        encode_parents_no_agreement(antecedent_idx, exceedance_idx, spatial_idx, trend_idx)
+        encode_parents_no_agreement(antecedent_idx, exceedance_idx, spatial_idx, trend_idx;
+                                     tail=tail_risk_idx, include_tail_risk)
     end
 
     # P(risk | parents) = column of CPT
@@ -412,6 +476,7 @@ struct BoundaryInput
     gefs_eprob_heavy::Float64
     spatial_coverage::Float64
     forecast_agreement::String
+    ens_max_ratio::Float64
 end
 
 struct BoundaryResult
@@ -435,19 +500,21 @@ function process_boundary(
     risk_cpt::Matrix{Float64},
     action_cpt::Matrix{Float64};
     include_agreement::Bool=true,
+    include_tail_risk::Bool=false,
 )::BoundaryResult
-    # Categorize inputs
     ant_idx = categorize_antecedent(b.antecedent_rainfall_mm)
     exc_idx = categorize_exceedance(b.gefs_eprob_heavy)
     spa_idx = categorize_spatial(b.spatial_coverage)
     tre_idx = categorize_trend(b.rainfall_trend)
     agr_idx = categorize_agreement(b.forecast_agreement)
+    tl_idx  = categorize_tail_risk(b.ens_max_ratio)
 
-    # Inference
     risk_probs, action_probs = infer_direct(
         ant_idx, exc_idx, spa_idx, tre_idx, agr_idx,
         risk_cpt, action_cpt;
         include_agreement,
+        tail_risk_idx=tl_idx,
+        include_tail_risk,
     )
 
     risk_idx = argmax(risk_probs)
@@ -473,14 +540,15 @@ Process all boundaries. Pre-builds CPTs once for efficiency.
 function process_all_boundaries(
     boundaries::Vector{BoundaryInput};
     include_agreement::Bool=true,
+    include_tail_risk::Bool=false,
 )::Vector{BoundaryResult}
-    risk_cpt, _ = build_risk_cpt(; include_agreement)
+    risk_cpt, _ = build_risk_cpt(; include_agreement, include_tail_risk)
     action_cpt = build_action_cpt()
 
     results = Vector{BoundaryResult}(undef, length(boundaries))
 
     for (i, b) in enumerate(boundaries)
-        results[i] = process_boundary(b, risk_cpt, action_cpt; include_agreement)
+        results[i] = process_boundary(b, risk_cpt, action_cpt; include_agreement, include_tail_risk)
         if i % 50 == 0
             @info "Processed $i/$(length(boundaries)) boundaries"
         end
@@ -574,8 +642,15 @@ end
 Run CSV-driven inference. Reads a prep CSV (one row per boundary) and writes
 a result CSV with the full risk + action probability vectors.
 """
-function run_csv(input_csv::String, output_csv::String; include_agreement::Bool)
+function run_csv(input_csv::String, output_csv::String;
+                 include_agreement::Bool, include_tail_risk::Bool)
     df = CSV.read(input_csv, DataFrames.DataFrame)
+
+    has_ratio = "ens_max_ratio" in names(df)
+    if include_tail_risk && !has_ratio
+        @warn "--tail-risk requested but ens_max_ratio column not in CSV; disabling"
+        include_tail_risk = false
+    end
 
     inputs = Vector{BoundaryInput}(undef, DataFrames.nrow(df))
     for (i, row) in enumerate(DataFrames.eachrow(df))
@@ -584,16 +659,17 @@ function run_csv(input_csv::String, output_csv::String; include_agreement::Bool)
             String(row.name),
             String(row.country),
             Float64(row.antecedent_rainfall_mm),
-            "",  # categorized internally
+            "",
             String(row.rainfall_trend),
             Float64(row.gefs_eprob_heavy),
             Float64(row.spatial_coverage),
             String(row.forecast_agreement),
+            has_ratio ? Float64(row.ens_max_ratio) : 0.0,
         )
     end
 
-    @info "Processing $(length(inputs)) boundaries (include_agreement=$include_agreement)"
-    results = process_all_boundaries(inputs; include_agreement)
+    @info "Processing $(length(inputs)) boundaries (agreement=$include_agreement, tail_risk=$include_tail_risk)"
+    results = process_all_boundaries(inputs; include_agreement, include_tail_risk)
 
     out = DataFrames.DataFrame(
         boundary_id         = [r.boundary_id for r in results],
@@ -635,21 +711,21 @@ function main()
     input_csv = getarg("--input-csv")
     output_csv = getarg("--output-csv")
     include_agreement = !("--no-agreement" in ARGS)
+    include_tail_risk = "--tail-risk" in ARGS
 
     if input_csv !== nothing && output_csv !== nothing
-        run_csv(input_csv, output_csv; include_agreement)
+        run_csv(input_csv, output_csv; include_agreement, include_tail_risk)
         return
     end
 
-    # Fallback: small synthetic demo
     @info "Flood BN IBF v1 (Julia/RxInfer port)"
-    @info "Usage: julia flood_bn_ibf_v1.jl --input-csv IN.csv --output-csv OUT.csv [--no-agreement]"
+    @info "Usage: julia flood_bn_ibf_v1.jl --input-csv IN.csv --output-csv OUT.csv [--no-agreement] [--tail-risk]"
     @info "       julia flood_bn_ibf_v1.jl --test"
 
     b = BoundaryInput(
         "KEN.1", "Nairobi", "Kenya",
         45.0, "Wet", "Increasing",
-        0.65, 0.4, "High",
+        0.65, 0.4, "High", 1.5,
     )
     risk_cpt, _ = build_risk_cpt()
     action_cpt = build_action_cpt()

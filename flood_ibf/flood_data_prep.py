@@ -226,20 +226,42 @@ def main() -> None:
     thresh_ec = {dur: regrid_to(thresh[dur], ref.lat, ref.lon) for dur in DURATIONS}
 
     eprob = {}
+    ens_max_ratio_per_dur = {}
     for dur in DURATIONS:
-        eprob[dur] = ((accums[dur] >= thresh_ec[dur])
-                      .astype("float32").mean(dim="member"))
+        exceeds = (accums[dur] >= thresh_ec[dur]).astype("float32")
+        eprob[dur] = exceeds.mean(dim="member")
+        ens_max_mm = accums[dur].max(dim="member")
+        ens_min_mm = accums[dur].min(dim="member")
+        safe_thresh = thresh_ec[dur].where(thresh_ec[dur] > 0, 1.0)
+        ens_max_ratio_per_dur[dur] = ens_max_mm / safe_thresh
     eprob_24 = eprob["24hr"]
     p_heavy = xr.concat([eprob[d] for d in DURATIONS], dim="duration").max("duration")
+
+    # Tail risk: max across durations of (ens_max / threshold) per pixel
+    max_ratio = xr.concat([ens_max_ratio_per_dur[d] for d in DURATIONS],
+                          dim="duration").max("duration")
+
+    # Ensemble mean and max at 24h for diagnostics
+    ens_mean_24h = accums["24hr"].mean(dim="member")
+    ens_max_24h = accums["24hr"].max(dim="member")
+    ens_min_24h = accums["24hr"].min(dim="member")
 
     ec_mask = build_mask(adm1, ref.lat, ref.lon)
     eprob_heavy_adm = zonal_reduce(p_heavy, ec_mask, ref.lat, n_adm)
     eprob_24h_adm = zonal_reduce(eprob_24, ec_mask, ref.lat, n_adm)
     spatial_cov_adm = zonal_reduce(p_heavy, ec_mask, ref.lat, n_adm, thresh=0.5)
+    max_ratio_adm = zonal_reduce(max_ratio, ec_mask, ref.lat, n_adm)
+    ens_mean_24h_adm = zonal_reduce(ens_mean_24h, ec_mask, ref.lat, n_adm)
+    ens_max_24h_adm = zonal_reduce(ens_max_24h, ec_mask, ref.lat, n_adm)
+    ens_min_24h_adm = zonal_reduce(ens_min_24h, ec_mask, ref.lat, n_adm)
 
     eprob_heavy_adm = fill_small_boundaries(eprob_heavy_adm, p_heavy, adm1)
     eprob_24h_adm = fill_small_boundaries(eprob_24h_adm, eprob_24, adm1)
     spatial_cov_adm = fill_small_boundaries(spatial_cov_adm, p_heavy, adm1, thresh=0.5)
+    max_ratio_adm = fill_small_boundaries(max_ratio_adm, max_ratio, adm1)
+    ens_mean_24h_adm = fill_small_boundaries(ens_mean_24h_adm, ens_mean_24h, adm1)
+    ens_max_24h_adm = fill_small_boundaries(ens_max_24h_adm, ens_max_24h, adm1)
+    ens_min_24h_adm = fill_small_boundaries(ens_min_24h_adm, ens_min_24h, adm1)
 
     # ---------------- Assemble output ----------------
     country = (adm1["GID_1"].str.split(".").str[0]
@@ -257,6 +279,10 @@ def main() -> None:
         "eprob_24h": np.round(eprob_24h_adm, 4),
         "spatial_coverage": np.round(spatial_cov_adm, 4),
         "forecast_agreement": "Medium",
+        "ens_max_ratio": np.round(max_ratio_adm, 4),
+        "ens_mean_24h_mm": np.round(ens_mean_24h_adm, 2),
+        "ens_max_24h_mm": np.round(ens_max_24h_adm, 2),
+        "ens_min_24h_mm": np.round(ens_min_24h_adm, 2),
         "target_date": str(D.date()),
     })
 

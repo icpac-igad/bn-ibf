@@ -1,0 +1,159 @@
+<mxfile host="app.diagrams.net" modified="2026-04-12T00:00:00.000Z" agent="Claude" version="24.0.0">
+  <diagram name="Flood BN IBF v1" id="flood-bn-dag">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;Flood BN IBF v1 — Bayesian Network Structure&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Expert-elicited discrete BN for short-term flood risk assessment (East Africa, admin-1 level)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="700" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ EVIDENCE NODES (root / observed) ============ -->
+
+        <!-- Antecedent Rainfall -->
+        <mxCell id="ant" value="&lt;b&gt;Antecedent Rainfall&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day accumulated IMERG (mm)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Dry (&amp;lt;10)&lt;br&gt;Normal (10–30)&lt;br&gt;Wet (30–60)&lt;br&gt;Very_Wet (60–100)&lt;br&gt;Saturated (&amp;gt;100)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight in base_risk: 0.30&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="200" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- Exceedance Probability -->
+        <mxCell id="exc" value="&lt;b&gt;Exceedance Probability&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;P_heavy = max over 7 durations&lt;br&gt;of P(accum ≥ 2yr RP)&lt;br&gt;ECMWF 51-member ensemble&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Very_Low (&amp;lt;0.20)&lt;br&gt;Low (0.20–0.40)&lt;br&gt;Medium (0.40–0.60)&lt;br&gt;High (0.60–0.80)&lt;br&gt;Very_High (&amp;gt;0.80)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight in base_risk: 0.55&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="100" width="210" height="240" as="geometry"/>
+        </mxCell>
+
+        <!-- Spatial Coverage -->
+        <mxCell id="spa" value="&lt;b&gt;Spatial Coverage&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Fraction of boundary area&lt;br&gt;with P_heavy ≥ 0.5&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Localized (&amp;lt;0.30)&lt;br&gt;Moderate (0.30–0.60)&lt;br&gt;Widespread (&amp;gt;0.60)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: +0.25 / +0.50&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="530" y="100" width="200" height="210" as="geometry"/>
+        </mxCell>
+
+        <!-- Rainfall Trend -->
+        <mxCell id="tre" value="&lt;b&gt;Rainfall Trend&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day regression slope&lt;br&gt;of daily IMERG boundary mean&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Decreasing (&amp;lt;−2 mm/day)&lt;br&gt;Stable (±2 mm/day)&lt;br&gt;Increasing (&amp;gt;+2 mm/day)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: −0.30 / +0.35&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="100" width="200" height="210" as="geometry"/>
+        </mxCell>
+
+        <!-- Forecast Agreement -->
+        <mxCell id="agr" value="&lt;b&gt;Forecast Agreement&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;|P_ecmwf − P_gefs|&lt;br&gt;(currently disabled:&lt;br&gt;ECMWF-only mode)&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Low (&amp;gt;0.30)&lt;br&gt;Medium (0.15–0.30)&lt;br&gt;High (≤0.15)&lt;br&gt;&lt;br&gt;&lt;i&gt;Blends risk with uniform&lt;br&gt;Low: 50/50, Med: 80/20&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;dashed=1;dashPattern=8 4;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="100" width="200" height="230" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ HIDDEN NODE: RISK LEVEL ============ -->
+
+        <mxCell id="risk" value="&lt;b&gt;Risk Level&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Hidden (inferred)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Minimal&lt;br&gt;Low&lt;br&gt;Moderate&lt;br&gt;High&lt;br&gt;Extreme&lt;br&gt;&lt;br&gt;&lt;i&gt;CPT: 5 × 675 entries&lt;br&gt;(225 without agreement)&lt;br&gt;Expert rules + base_risk score&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="450" y="440" width="220" height="230" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ QUERY NODE: ACTION ============ -->
+
+        <mxCell id="act" value="&lt;b&gt;Recommended Action&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Query node&lt;br&gt;&lt;br&gt;States (4):&lt;br&gt;Monitor&lt;br&gt;Alert&lt;br&gt;Prepare&lt;br&gt;Act&lt;br&gt;&lt;br&gt;&lt;i&gt;CPT: 4 × 5 matrix&lt;br&gt;P(action | risk_level)&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="465" y="740" width="190" height="200" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ EDGES ============ -->
+
+        <!-- ant → risk -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="ant" target="risk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1l" value="&lt;font style=&quot;font-size:10px&quot;&gt;w=0.30&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e1">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="-20" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- exc → risk -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="exc" target="risk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2l" value="&lt;font style=&quot;font-size:10px&quot;&gt;&lt;b&gt;w=0.55&lt;/b&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e2">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="-15" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- spa → risk -->
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="spa" target="risk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- tre → risk -->
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.9;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="tre" target="risk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- agr → risk (dashed) -->
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#9673a6;endArrow=blockThin;endFill=1;dashed=1;dashPattern=8 4;" edge="1" source="agr" target="risk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5l" value="&lt;font color=&quot;#9673a6&quot; style=&quot;font-size:10px&quot;&gt;&lt;i&gt;optional&lt;br&gt;(--no-agreement)&lt;/i&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e5">
+          <mxGeometry x="0.3" relative="1" as="geometry"><mxPoint x="20" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- risk → action -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#82b366;endArrow=blockThin;endFill=1;" edge="1" source="risk" target="act" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6l" value="&lt;font style=&quot;font-size:10px&quot;&gt;P(action | risk)&lt;br&gt;4×5 CPT&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e6">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="45" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ============ LEGEND ============ -->
+
+        <mxCell id="leg_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="740" width="340" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="55" y="748" width="60" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="55" y="780" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Evidence node (observed / clamped to data)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="776" width="260" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;arcSize=20;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="55" y="805" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Optional evidence (disabled in ECMWF-only mode)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="801" width="290" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="55" y="830" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Hidden node (inferred via CPT lookup / message passing)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="826" width="310" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="55" y="855" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg4t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Query node (actionable output)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="851" width="190" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg5t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Edge thickness ∝ weight in base_risk score&lt;br&gt;Thickest edge = exceedance_prob (w=0.55)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="55" y="878" width="260" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ ACTION CPT TABLE (annotation) ============ -->
+
+        <mxCell id="cpt_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="500" width="460" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="cpt_title" value="&lt;b&gt;Action CPT — P(action | risk_level)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="755" y="508" width="220" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="cpt_table" value="&lt;font style=&quot;font-size:11px&quot; face=&quot;monospace&quot;&gt;Risk →    Minimal  Low   Mod   High  Extr&lt;br&gt;────────────────────────────────────────&lt;br&gt;Monitor    0.95   0.15  0.00  0.00  0.00&lt;br&gt;Alert      0.05   0.80  0.20  0.05  0.00&lt;br&gt;Prepare    0.00   0.05  0.75  0.25  0.05&lt;br&gt;Act        0.00   0.00  0.05  0.70  0.95&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="755" y="532" width="430" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ INFERENCE NOTE ============ -->
+
+        <mxCell id="inf_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="690" width="460" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="inf_title" value="&lt;b&gt;Inference (3 equivalent methods)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="755" y="698" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="inf_text" value="&lt;font style=&quot;font-size:11px&quot;&gt;① &lt;b&gt;Direct matrix&lt;/b&gt; (Julia infer_direct) — CPT column lookup + matmul, ~50 ns/boundary&lt;br&gt;② &lt;b&gt;Message passing&lt;/b&gt; (Julia RxInfer.jl) — factor graph BP, supports learning/streaming&lt;br&gt;③ &lt;b&gt;Variable elimination&lt;/b&gt; (Python pgmpy) — exact factor marginalization, ~10 ms/boundary&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="755" y="722" width="500" height="65" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
