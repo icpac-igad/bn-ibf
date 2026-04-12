@@ -138,6 +138,41 @@ def zonal_reduce(da: xr.DataArray, mask: xr.DataArray, lat: xr.DataArray,
     return out
 
 
+def zonal_quantile(da: xr.DataArray, mask: xr.DataArray, n_regions: int,
+                   q: float = 0.95) -> np.ndarray:
+    """Per-region q-th quantile of pixel values (unweighted). NaN if empty."""
+    mask_vals = mask.values
+    vals = da.values
+    out = np.full(n_regions, np.nan, dtype=np.float64)
+    for r in range(n_regions):
+        sel = mask_vals == r
+        if not sel.any():
+            continue
+        v = vals[sel]
+        v = v[np.isfinite(v)]
+        if v.size == 0:
+            continue
+        out[r] = float(np.quantile(v, q))
+    return out
+
+
+def zonal_max(da: xr.DataArray, mask: xr.DataArray, n_regions: int) -> np.ndarray:
+    """Per-region maximum of pixel values. NaN if empty."""
+    mask_vals = mask.values
+    vals = da.values
+    out = np.full(n_regions, np.nan, dtype=np.float64)
+    for r in range(n_regions):
+        sel = mask_vals == r
+        if not sel.any():
+            continue
+        v = vals[sel]
+        v = v[np.isfinite(v)]
+        if v.size == 0:
+            continue
+        out[r] = float(np.max(v))
+    return out
+
+
 def fill_small_boundaries(values: np.ndarray, da: xr.DataArray,
                           gdf: gpd.GeoDataFrame, thresh: float | None = None) -> np.ndarray:
     """For boundaries with no pixel hit, sample nearest pixel at centroid."""
@@ -250,7 +285,13 @@ def main() -> None:
     eprob_heavy_adm = zonal_reduce(p_heavy, ec_mask, ref.lat, n_adm)
     eprob_24h_adm = zonal_reduce(eprob_24, ec_mask, ref.lat, n_adm)
     spatial_cov_adm = zonal_reduce(p_heavy, ec_mask, ref.lat, n_adm, thresh=0.5)
-    max_ratio_adm = zonal_reduce(max_ratio, ec_mask, ref.lat, n_adm)
+
+    # Pixel-level tail aggregation (upgrade from boundary-mean)
+    max_ratio_mean_adm = zonal_reduce(max_ratio, ec_mask, ref.lat, n_adm)
+    max_ratio_p95_adm = zonal_quantile(max_ratio, ec_mask, n_adm, q=0.95)
+    max_ratio_peak_adm = zonal_max(max_ratio, ec_mask, n_adm)
+    hotspot_frac_adm = zonal_reduce(max_ratio, ec_mask, ref.lat, n_adm, thresh=1.0)
+
     ens_mean_24h_adm = zonal_reduce(ens_mean_24h, ec_mask, ref.lat, n_adm)
     ens_max_24h_adm = zonal_reduce(ens_max_24h, ec_mask, ref.lat, n_adm)
     ens_min_24h_adm = zonal_reduce(ens_min_24h, ec_mask, ref.lat, n_adm)
@@ -258,7 +299,10 @@ def main() -> None:
     eprob_heavy_adm = fill_small_boundaries(eprob_heavy_adm, p_heavy, adm1)
     eprob_24h_adm = fill_small_boundaries(eprob_24h_adm, eprob_24, adm1)
     spatial_cov_adm = fill_small_boundaries(spatial_cov_adm, p_heavy, adm1, thresh=0.5)
-    max_ratio_adm = fill_small_boundaries(max_ratio_adm, max_ratio, adm1)
+    max_ratio_mean_adm = fill_small_boundaries(max_ratio_mean_adm, max_ratio, adm1)
+    max_ratio_p95_adm = fill_small_boundaries(max_ratio_p95_adm, max_ratio, adm1)
+    max_ratio_peak_adm = fill_small_boundaries(max_ratio_peak_adm, max_ratio, adm1)
+    hotspot_frac_adm = fill_small_boundaries(hotspot_frac_adm, max_ratio, adm1, thresh=1.0)
     ens_mean_24h_adm = fill_small_boundaries(ens_mean_24h_adm, ens_mean_24h, adm1)
     ens_max_24h_adm = fill_small_boundaries(ens_max_24h_adm, ens_max_24h, adm1)
     ens_min_24h_adm = fill_small_boundaries(ens_min_24h_adm, ens_min_24h, adm1)
@@ -266,6 +310,11 @@ def main() -> None:
     # ---------------- Assemble output ----------------
     country = (adm1["GID_1"].str.split(".").str[0]
                .map(ISO_TO_COUNTRY).fillna("Unknown"))
+
+    # Spatial coverage now blends the classical P_heavy mask with the
+    # pixel-level hotspot fraction (pixels where any member exceeds threshold).
+    # Use the max of the two so localized hotspots aren't smoothed away.
+    spatial_cov_final = np.fmax(spatial_cov_adm, hotspot_frac_adm)
 
     df = pd.DataFrame({
         "id": adm1["GID_1"],
@@ -277,9 +326,13 @@ def main() -> None:
         "trend_slope_mm_per_day": np.round(slopes, 3),
         "gefs_eprob_heavy": np.round(eprob_heavy_adm, 4),
         "eprob_24h": np.round(eprob_24h_adm, 4),
-        "spatial_coverage": np.round(spatial_cov_adm, 4),
+        "spatial_coverage": np.round(spatial_cov_final, 4),
+        "spatial_cov_mean_p": np.round(spatial_cov_adm, 4),
+        "hotspot_fraction": np.round(hotspot_frac_adm, 4),
         "forecast_agreement": "Medium",
-        "ens_max_ratio": np.round(max_ratio_adm, 4),
+        "ens_max_ratio": np.round(max_ratio_p95_adm, 4),  # now p95 (pixel-level)
+        "ens_max_ratio_mean": np.round(max_ratio_mean_adm, 4),
+        "ens_max_ratio_peak": np.round(max_ratio_peak_adm, 4),
         "ens_mean_24h_mm": np.round(ens_mean_24h_adm, 2),
         "ens_max_24h_mm": np.round(ens_max_24h_adm, 2),
         "ens_min_24h_mm": np.round(ens_min_24h_adm, 2),
