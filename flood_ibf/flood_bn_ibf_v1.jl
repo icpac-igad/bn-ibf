@@ -15,9 +15,19 @@ Author: ICPAC IBF Team
 Date: April 2026
 =#
 
-using RxInfer
 using LinearAlgebra
 using Printf
+using CSV
+using DataFrames
+
+# RxInfer is optional: only needed for the reactive message-passing demo path.
+# Direct inference (infer_direct) uses pure matrix math and works without it.
+const HAS_RXINFER = try
+    @eval using RxInfer
+    true
+catch
+    false
+end
 
 # ============================================================================
 # CONSTANTS
@@ -350,62 +360,39 @@ end
 # online/streaming updates, or handling missing evidence).
 # ============================================================================
 
-@model function flood_bn_model(; risk_cpt_matrix, action_cpt_matrix, n_parent_combos)
-    # Priors for root nodes (will be clamped to observed evidence)
-    # Using a "super-parent" encoding for the risk node
-    parent_combo ~ Categorical(fill(1.0 / n_parent_combos, n_parent_combos))
-
-    # Risk level via DiscreteTransition
-    risk_level ~ DiscreteTransition(parent_combo, risk_cpt_matrix)
-
-    # Action via DiscreteTransition
-    action ~ DiscreteTransition(risk_level, action_cpt_matrix)
-end
-
-"""
-Run inference using RxInfer's message passing engine.
-
-This is useful when:
-- You want to learn CPT parameters from data (add Dirichlet priors)
-- You want streaming/online updates
-- You have partial/uncertain evidence
-
-For fixed CPTs with hard evidence, infer_direct() is simpler and faster.
-"""
-function infer_rxinfer(
-    antecedent_idx::Int,
-    exceedance_idx::Int,
-    spatial_idx::Int,
-    trend_idx::Int,
-    agreement_idx::Int;
-    include_agreement::Bool=true,
-)
-    risk_cpt, n_combos = build_risk_cpt(; include_agreement)
-    action_cpt = build_action_cpt()
-
-    parent_idx = if include_agreement
-        encode_parents(antecedent_idx, exceedance_idx, spatial_idx, trend_idx, agreement_idx)
-    else
-        encode_parents_no_agreement(antecedent_idx, exceedance_idx, spatial_idx, trend_idx)
+if HAS_RXINFER
+    @eval @model function flood_bn_model(; risk_cpt_matrix, action_cpt_matrix, n_parent_combos)
+        parent_combo ~ Categorical(fill(1.0 / n_parent_combos, n_parent_combos))
+        risk_level ~ DiscreteTransition(parent_combo, risk_cpt_matrix)
+        action ~ DiscreteTransition(risk_level, action_cpt_matrix)
     end
 
-    # Create one-hot evidence for the parent combo
-    parent_evidence = zeros(n_combos)
-    parent_evidence[parent_idx] = 1.0
-
-    result = infer(
-        model          = flood_bn_model(;
-            risk_cpt_matrix  = risk_cpt,
-            action_cpt_matrix = action_cpt,
-            n_parent_combos  = n_combos,
-        ),
-        data = (parent_combo = parent_evidence,),
+    @eval function infer_rxinfer(
+        antecedent_idx::Int, exceedance_idx::Int, spatial_idx::Int,
+        trend_idx::Int, agreement_idx::Int; include_agreement::Bool=true,
     )
+        risk_cpt, n_combos = build_risk_cpt(; include_agreement)
+        action_cpt = build_action_cpt()
 
-    risk_posterior = result.posteriors[:risk_level]
-    action_posterior = result.posteriors[:action]
+        parent_idx = if include_agreement
+            encode_parents(antecedent_idx, exceedance_idx, spatial_idx, trend_idx, agreement_idx)
+        else
+            encode_parents_no_agreement(antecedent_idx, exceedance_idx, spatial_idx, trend_idx)
+        end
 
-    return probvec(risk_posterior), probvec(action_posterior)
+        parent_evidence = zeros(n_combos)
+        parent_evidence[parent_idx] = 1.0
+
+        result = infer(
+            model = flood_bn_model(;
+                risk_cpt_matrix  = risk_cpt,
+                action_cpt_matrix = action_cpt,
+                n_parent_combos  = n_combos,
+            ),
+            data = (parent_combo = parent_evidence,),
+        )
+        return probvec(result.posteriors[:risk_level]), probvec(result.posteriors[:action])
+    end
 end
 
 # ============================================================================
@@ -575,35 +562,99 @@ end
 # CLI ENTRY POINT
 # ============================================================================
 
+"""
+Parse a flag value from ARGS: --flag value → value (or nothing).
+"""
+function getarg(flag::String)
+    i = findfirst(==(flag), ARGS)
+    return i === nothing || i == length(ARGS) ? nothing : ARGS[i + 1]
+end
+
+"""
+Run CSV-driven inference. Reads a prep CSV (one row per boundary) and writes
+a result CSV with the full risk + action probability vectors.
+"""
+function run_csv(input_csv::String, output_csv::String; include_agreement::Bool)
+    df = CSV.read(input_csv, DataFrames.DataFrame)
+
+    inputs = Vector{BoundaryInput}(undef, DataFrames.nrow(df))
+    for (i, row) in enumerate(DataFrames.eachrow(df))
+        inputs[i] = BoundaryInput(
+            String(row.id),
+            String(row.name),
+            String(row.country),
+            Float64(row.antecedent_rainfall_mm),
+            "",  # categorized internally
+            String(row.rainfall_trend),
+            Float64(row.gefs_eprob_heavy),
+            Float64(row.spatial_coverage),
+            String(row.forecast_agreement),
+        )
+    end
+
+    @info "Processing $(length(inputs)) boundaries (include_agreement=$include_agreement)"
+    results = process_all_boundaries(inputs; include_agreement)
+
+    out = DataFrames.DataFrame(
+        boundary_id         = [r.boundary_id for r in results],
+        boundary_name       = [r.boundary_name for r in results],
+        country             = [r.country for r in results],
+        antecedent_category = [r.antecedent_category for r in results],
+        rainfall_trend      = [r.rainfall_trend for r in results],
+        risk_level          = [r.risk_level for r in results],
+        recommended_action  = [r.recommended_action for r in results],
+        confidence          = [r.confidence for r in results],
+        risk_minimal        = [r.risk_probabilities[1] for r in results],
+        risk_low            = [r.risk_probabilities[2] for r in results],
+        risk_moderate       = [r.risk_probabilities[3] for r in results],
+        risk_high           = [r.risk_probabilities[4] for r in results],
+        risk_extreme        = [r.risk_probabilities[5] for r in results],
+        action_monitor      = [r.action_probabilities[1] for r in results],
+        action_alert        = [r.action_probabilities[2] for r in results],
+        action_prepare      = [r.action_probabilities[3] for r in results],
+        action_act          = [r.action_probabilities[4] for r in results],
+    )
+
+    mkpath(dirname(abspath(output_csv)))
+    CSV.write(output_csv, out)
+    @info "Wrote $output_csv rows=$(DataFrames.nrow(out))"
+
+    # Brief distribution print
+    risk_counts = DataFrames.combine(DataFrames.groupby(out, :risk_level), DataFrames.nrow => :n)
+    @info "Risk distribution:" risk_counts
+    action_counts = DataFrames.combine(DataFrames.groupby(out, :recommended_action), DataFrames.nrow => :n)
+    @info "Action distribution:" action_counts
+end
+
 function main()
     if "--test" in ARGS
         self_test()
         return
     end
 
-    # Simple demo with synthetic data
+    input_csv = getarg("--input-csv")
+    output_csv = getarg("--output-csv")
+    include_agreement = !("--no-agreement" in ARGS)
+
+    if input_csv !== nothing && output_csv !== nothing
+        run_csv(input_csv, output_csv; include_agreement)
+        return
+    end
+
+    # Fallback: small synthetic demo
     @info "Flood BN IBF v1 (Julia/RxInfer port)"
-    @info "Run with --test for self-test"
+    @info "Usage: julia flood_bn_ibf_v1.jl --input-csv IN.csv --output-csv OUT.csv [--no-agreement]"
+    @info "       julia flood_bn_ibf_v1.jl --test"
 
-    # Example: process a single boundary
     b = BoundaryInput(
-        "KEN.1",
-        "Nairobi",
-        "Kenya",
-        45.0,   # antecedent rainfall mm
-        "Wet",
-        "Increasing",
-        0.65,   # GEFS exceedance prob (heavy)
-        0.4,    # spatial coverage
-        "High",
+        "KEN.1", "Nairobi", "Kenya",
+        45.0, "Wet", "Increasing",
+        0.65, 0.4, "High",
     )
-
     risk_cpt, _ = build_risk_cpt()
     action_cpt = build_action_cpt()
-
     result = process_boundary(b, risk_cpt, action_cpt)
-
-    @info "Single boundary result:" boundary=result.boundary_id risk=result.risk_level action=result.recommended_action confidence=@sprintf("%.2f", result.confidence)
+    @info "Demo result:" boundary=result.boundary_id risk=result.risk_level action=result.recommended_action confidence=@sprintf("%.2f", result.confidence)
 
     println("\nRisk probabilities:")
     for (state, prob) in zip(RISK_STATES, result.risk_probabilities)
