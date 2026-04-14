@@ -34,6 +34,14 @@ ACTION_COLORS = {
     "Monitor": "#4575b4", "Alert": "#fee08b",
     "Prepare": "#f46d43", "Act": "#a50026",
 }
+# CRMA Layer-1 traffic-light palette
+CRMA_STATES = ["Monitor", "Evaluate", "Assess", "Actionable_Risk"]
+CRMA_COLORS = {
+    "Monitor":         "#1a9850",  # Green
+    "Evaluate":        "#fee08b",  # Yellow
+    "Assess":          "#f46d43",  # Orange
+    "Actionable_Risk": "#a50026",  # Red
+}
 
 
 # ---- discretization (mirrors the Julia categorizers) ----
@@ -99,7 +107,12 @@ def draw_dist_node(ax, x, y, title, states, probs, winner, box_color,
     avail = top_y - base_y
     x0 = x - width/2 + 0.015
     for i, (s, p) in enumerate(zip(states, probs)):
-        col = (RISK_COLORS if states is RISK_STATES else ACTION_COLORS).get(s, "#999")
+        if states is RISK_STATES:
+            col = RISK_COLORS.get(s, "#999")
+        elif states is CRMA_STATES:
+            col = CRMA_COLORS.get(s, "#999")
+        else:
+            col = ACTION_COLORS.get(s, "#999")
         bar_h = avail * max(p, 0.01)
         ax.add_patch(mpatches.Rectangle((x0 + i * bar_w, base_y),
                                         bar_w * 0.85, bar_h,
@@ -139,10 +152,12 @@ def render_day(inp_row: pd.Series, out_row: pd.Series,
     # ---- header ----
     country = out_row.get("country", "")
     risk = out_row["risk_level"]
-    action = out_row["recommended_action"]
+    crma = out_row.get("crma_state", out_row.get("recommended_action", "Monitor"))
+    traffic = out_row.get("traffic_light", "")
+    crma_expl = out_row.get("crma_explanation", "")
     confidence = float(out_row["confidence"])
     title = (f"Flood BN IBF v1  •  {boundary} ({country})  •  {date}\n"
-             f"risk = {risk}    action = {action}    confidence = {confidence:.2f}")
+             f"risk = {risk}    CRMA = {crma} ({traffic})    confidence = {confidence:.2f}")
     fig.suptitle(title, fontsize=13, y=0.98)
 
     # ---- evidence nodes (top row) ----
@@ -211,18 +226,24 @@ def render_day(inp_row: pd.Series, out_row: pd.Series,
                    RISK_STATES, probs_r, risk,
                    box_color="#fff2cc", border_color="#d6b656")
 
-    # ---- action node (bottom) ----
-    probs_a = np.array([float(out_row[f"action_{s.lower()}"]) for s in ACTION_STATES])
-    draw_dist_node(ax, 0.5, 0.12, "P(action | risk_level)",
-                   ACTION_STATES, probs_a, action,
+    # ---- CRMA state box (bottom) — Layer-1 output, deterministic rule ----
+    # Cumulative-mass bars per CRMA test threshold
+    p_act      = probs_r[3] + probs_r[4]
+    p_assess   = probs_r[2] + probs_r[3] + probs_r[4]
+    p_evaluate = probs_r[1] + probs_r[2] + probs_r[3] + probs_r[4]
+    p_monitor  = probs_r[0]
+    crma_bars = np.array([p_monitor, p_evaluate, p_assess, p_act])
+    draw_dist_node(ax, 0.5, 0.12,
+                   "CRMA state (deterministic from P(risk_level), C/L=0.2)",
+                   CRMA_STATES, crma_bars, crma,
                    box_color="#d5e8d4", border_color="#82b366",
-                   width=0.28)
+                   width=0.38)
 
     # ---- edges: evidence → risk_level ----
     for xe in xs:
         draw_edge(ax, xe, y_ev - 0.06, 0.5, 0.42 + 0.08,
                   color="#6c8ebf", width=1.0)
-    # ---- edge: risk → action ----
+    # ---- edge: risk → CRMA ----
     draw_edge(ax, 0.5, 0.42 - 0.08, 0.5, 0.12 + 0.08,
               color="#82b366", width=2.0)
 

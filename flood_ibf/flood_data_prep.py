@@ -191,6 +191,80 @@ def fill_small_boundaries(values: np.ndarray, da: xr.DataArray,
     return out
 
 
+def compute_per_member_ratios(
+    accums: dict[str, xr.DataArray],
+    thresh_ec: dict[str, xr.DataArray],
+    mask: xr.DataArray,
+    adm1: gpd.GeoDataFrame,
+    n_regions: int,
+) -> pd.DataFrame:
+    """
+    For each (boundary, member) pair, compute the max-over-durations of the
+    pixel p95 of (accum_mm / threshold_mm). This produces per-member
+    storyline material: which specific members project threshold-crossing
+    at which boundaries.
+
+    Returns a long-form DataFrame with columns:
+        boundary_id, boundary_name, country, member, max_ratio, tail_state
+    """
+    def _tail(ratio: float) -> str:
+        if not np.isfinite(ratio): return "Nil"
+        if ratio < 0.5: return "Nil"
+        if ratio < 1.0: return "Low"
+        if ratio < 2.0: return "Moderate"
+        return "High"
+
+    # per-member, per-pixel ratio across durations → single grid per member
+    durations = list(accums.keys())
+    members = accums[durations[0]].member.values
+
+    # Stack duration-level ratios then max per pixel per member
+    n_mem = len(members)
+    n_lat = accums[durations[0]].sizes["lat"]
+    n_lon = accums[durations[0]].sizes["lon"]
+    per_member_ratio = np.zeros((n_mem, n_lat, n_lon), dtype="float32")
+    for dur in durations:
+        a = accums[dur].values           # (member, lat, lon)
+        t = thresh_ec[dur].values        # (lat, lon)
+        safe_t = np.where(t > 0, t, np.inf)
+        r = a / safe_t[None, :, :]
+        per_member_ratio = np.maximum(per_member_ratio, r)
+
+    # Zonal p95 per (boundary, member)
+    mask_vals = mask.values
+    rows = []
+    iso_to_country = ISO_TO_COUNTRY
+    for r_idx in range(n_regions):
+        sel = mask_vals == r_idx
+        if not sel.any():
+            # Centroid fallback: pick nearest pixel
+            pt = adm1.iloc[r_idx].geometry.centroid
+            lat_vals = accums[durations[0]].lat.values
+            lon_vals = accums[durations[0]].lon.values
+            i = int(np.argmin(np.abs(lat_vals - pt.y)))
+            j = int(np.argmin(np.abs(lon_vals - pt.x)))
+            member_ratios = per_member_ratio[:, i, j]
+        else:
+            # Pixel-p95 per member across boundary pixels
+            pixels = per_member_ratio[:, sel]  # (member, n_pix)
+            member_ratios = np.quantile(pixels, 0.95, axis=1)
+
+        gid = adm1.iloc[r_idx]["GID_1"]
+        nm = adm1.iloc[r_idx]["NAME_1"]
+        cc = iso_to_country.get(gid.split(".")[0], "Unknown")
+        for m_idx, m in enumerate(members):
+            rv = float(member_ratios[m_idx])
+            rows.append({
+                "boundary_id": gid,
+                "boundary_name": nm,
+                "country": cc,
+                "member": str(m),
+                "max_ratio": round(rv, 4),
+                "tail_state": _tail(rv),
+            })
+    return pd.DataFrame(rows)
+
+
 def classify_trend(slope: float, band: float) -> str:
     if not np.isfinite(slope):
         return "Stable"
@@ -209,6 +283,8 @@ def main() -> None:
     ap.add_argument("--adm1", default="icpac_adm1v3.geojson")
     ap.add_argument("--cmorph-rp", default="cmorph_ea_return_periods.nc")
     ap.add_argument("--trend-band", type=float, default=2.0)
+    ap.add_argument("--member-sidecar", default=None,
+                    help="Optional per-member sidecar CSV path (long format)")
     args = ap.parse_args()
 
     D = pd.Timestamp(args.date)
@@ -345,6 +421,16 @@ def main() -> None:
     print(f"[prep] wrote {out}  rows={len(df)}  "
           f"ant_mean={np.nanmean(antecedent_mm):.1f}mm  "
           f"heavy_mean={np.nanmean(eprob_heavy_adm):.3f}")
+
+    if args.member_sidecar:
+        member_df = compute_per_member_ratios(accums, thresh_ec, ec_mask, adm1, n_adm)
+        sidecar_path = Path(args.member_sidecar)
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        member_df.to_csv(sidecar_path, index=False)
+        n_crossing = (member_df["max_ratio"] >= 1.0).sum()
+        n_rows = len(member_df)
+        print(f"[prep] wrote member sidecar {sidecar_path}  rows={n_rows}  "
+              f"threshold_crossing_members={n_crossing} ({n_crossing/n_rows*100:.1f}%)")
 
 
 if __name__ == "__main__":

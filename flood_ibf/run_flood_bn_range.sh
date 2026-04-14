@@ -6,6 +6,7 @@ set -euo pipefail
 START_DATE="${1:-2026-03-01}"
 END_DATE="${2:-2026-03-10}"
 RP_YEARS="${RP_YEARS:-2}"
+COST_LOSS_RATIO="${COST_LOSS_RATIO:-0.2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -29,19 +30,22 @@ while [[ "$D" < "$(date -I -d "$END_DATE + 1 day")" ]]; do
 
   IN_CSV="${INPUT_DIR}/flood_inputs_${D}.csv"
   OUT_CSV="${OUTPUT_DIR}/flood_bn_v1_${D}.csv"
+  MEMBER_CSV="${INPUT_DIR}/member_risk_${D}.csv"
 
   echo "[step 1/2] data prep..."
   uv run "${UV_PKGS[@]}" python flood_data_prep.py \
       --date "$D" \
       --rp-years "$RP_YEARS" \
-      --out "$IN_CSV"
+      --out "$IN_CSV" \
+      --member-sidecar "$MEMBER_CSV"
 
   echo "[step 2/2] Julia BN inference..."
   julia --project=. flood_bn_ibf_v1.jl \
       --input-csv "$IN_CSV" \
       --output-csv "$OUT_CSV" \
       --no-agreement \
-      --tail-risk
+      --tail-risk \
+      --cost-loss-ratio "$COST_LOSS_RATIO"
 
   D="$(date -I -d "$D + 1 day")"
 done

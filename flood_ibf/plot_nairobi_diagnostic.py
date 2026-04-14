@@ -26,12 +26,13 @@ RISK_COLORS = {
     "High":     "#f46d43",
     "Extreme":  "#a50026",
 }
-ACTION_COLORS = {
-    "Monitor": "#4575b4",
-    "Alert":   "#fee08b",
-    "Prepare": "#f46d43",
-    "Act":     "#a50026",
+CRMA_COLORS = {
+    "Monitor":         "#1a9850",  # Green
+    "Evaluate":        "#fee08b",  # Yellow
+    "Assess":          "#f46d43",  # Orange
+    "Actionable_Risk": "#a50026",  # Red
 }
+ACTION_COLORS = CRMA_COLORS  # alias for backward compat
 
 
 def collect(boundary_name: str, start: str, end: str,
@@ -44,6 +45,7 @@ def collect(boundary_name: str, start: str, end: str,
         out = pd.read_csv(out_dir / f"flood_bn_v1_{ds}.csv")
         ri = inp[inp["name"] == boundary_name].iloc[0]
         ro = out[out["boundary_name"] == boundary_name].iloc[0]
+        crma = ro.get("crma_state", ro.get("recommended_action", "Monitor"))
         rows.append({
             "date": d,
             "ant_mm": float(ri["antecedent_rainfall_mm"]),
@@ -54,7 +56,7 @@ def collect(boundary_name: str, start: str, end: str,
             "max_24h": float(ri["ens_max_24h_mm"]),
             "min_24h": float(ri["ens_min_24h_mm"]),
             "risk": ro["risk_level"],
-            "action": ro["recommended_action"],
+            "action": crma,
             "confidence": float(ro["confidence"]),
         })
     return pd.DataFrame(rows)
@@ -174,10 +176,10 @@ def main() -> None:
                 fontsize=8, fontweight="bold")
     ax.text(df["date"].min() - pd.Timedelta(hours=14), 1.45, "Risk →",
             ha="right", va="center", fontsize=10, fontweight="bold")
-    ax.text(df["date"].min() - pd.Timedelta(hours=14), 0.50, "Action →",
+    ax.text(df["date"].min() - pd.Timedelta(hours=14), 0.50, "CRMA →",
             ha="right", va="center", fontsize=10, fontweight="bold")
     ax.set_yticks([])
-    ax.set_title("4. Bayesian Network output per day (risk level / recommended action)",
+    ax.set_title("4. Bayesian Network output per day (risk level / CRMA state, C/L=0.2)",
                  loc="left", fontsize=11)
     ax.axvspan(flood_start, flood_end, color="red", alpha=0.12, zorder=0)
     ax.spines["left"].set_visible(False)

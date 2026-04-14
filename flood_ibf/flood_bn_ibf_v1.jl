@@ -39,9 +39,16 @@ const EXCEEDANCE_STATES = ["Very_Low", "Low", "Medium", "High", "Very_High"]  # 
 const SPATIAL_STATES    = ["Localized", "Moderate", "Widespread"]             # 3
 const TREND_STATES      = ["Decreasing", "Stable", "Increasing"]             # 3
 const AGREEMENT_STATES  = ["Low", "Medium", "High"]                          # 3
-const TAIL_RISK_STATES  = ["None", "Low", "Moderate", "High"]                # 4
+const TAIL_RISK_STATES  = ["Nil", "Low", "Moderate", "High"]                 # 4
 const RISK_STATES       = ["Minimal", "Low", "Moderate", "High", "Extreme"]  # 5
-const ACTION_STATES     = ["Monitor", "Alert", "Prepare", "Act"]             # 4
+const ACTION_STATES     = ["Monitor", "Alert", "Prepare", "Act"]             # 4 (deprecated)
+const CRMA_STATES       = ["Monitor", "Evaluate", "Assess", "Actionable_Risk"] # 4 (Layer-1 output)
+const TRAFFIC_LIGHT     = Dict(
+    "Monitor"         => "Green",
+    "Evaluate"        => "Yellow",
+    "Assess"          => "Orange",
+    "Actionable_Risk" => "Red",
+)
 
 # Precipitation thresholds (mm/24h)
 const PRECIP_THRESHOLDS_24H = Dict(
@@ -130,6 +137,54 @@ function categorize_tail_risk(max_ratio::Float64)::Int
     max_ratio < 1.0 && return 2  # Low — approaching threshold
     max_ratio < 2.0 && return 3  # Moderate — at least 1 member exceeds
     return 4  # High — member well above threshold (≥ 2× RP)
+end
+
+"""
+Compute the CRMA risk-assessment state from the risk_level posterior
+using a cost-loss-ratio based trigger rule.
+
+The cost-loss framing (Murphy 1977, Richardson 2000, Lopez et al. 2020):
+rational trigger when P(event) ≥ C/L, where C = cost of acting early,
+L = loss from missed event. For FbF cash transfers, C/L ≈ 0.1;
+pre-positioned stockpiles, C/L ≈ 0.2 (Weingärtner & Wilkinson 2019).
+
+Four-state rule:
+  Actionable_Risk : P(High) + P(Extreme) ≥ cost_loss_ratio
+  Assess          : P(Mod) + P(High) + P(Extreme) ≥ max(2·C/L, 0.4)
+  Evaluate        : P(Low) + P(Mod) + P(High) + P(Extreme) ≥ max(3·C/L, 0.3)
+  Monitor         : otherwise
+
+Returns (state_idx, explanation_string).
+"""
+function compute_crma_state(risk_probs::Vector{Float64};
+                            cost_loss_ratio::Float64=0.2)
+    p_minimal  = risk_probs[1]
+    p_low      = risk_probs[2]
+    p_moderate = risk_probs[3]
+    p_high     = risk_probs[4]
+    p_extreme  = risk_probs[5]
+
+    p_act      = p_high + p_extreme
+    p_assess   = p_moderate + p_high + p_extreme
+    p_evaluate = p_low + p_moderate + p_high + p_extreme
+
+    θ_act      = cost_loss_ratio
+    θ_assess   = max(2.0 * cost_loss_ratio, 0.40)
+    θ_evaluate = max(3.0 * cost_loss_ratio, 0.30)
+
+    if p_act >= θ_act
+        expl = "P(High∪Extreme)=$(round(p_act, digits=2)) ≥ C/L=$(round(θ_act, digits=2))"
+        return 4, expl
+    elseif p_assess >= θ_assess
+        expl = "P(Mod∪High∪Extreme)=$(round(p_assess, digits=2)) ≥ $(round(θ_assess, digits=2))"
+        return 3, expl
+    elseif p_evaluate >= θ_evaluate
+        expl = "P(Low∪Mod∪High∪Extreme)=$(round(p_evaluate, digits=2)) ≥ $(round(θ_evaluate, digits=2))"
+        return 2, expl
+    else
+        expl = "all conditional masses below thresholds"
+        return 1, expl
+    end
 end
 
 # ============================================================================
@@ -487,9 +542,12 @@ struct BoundaryResult
     rainfall_trend::String
     risk_level::String
     risk_probabilities::Vector{Float64}
-    recommended_action::String
+    recommended_action::String         # deprecated (Layer-2 leakage)
     action_probabilities::Vector{Float64}
     confidence::Float64
+    crma_state::String                 # Layer-1 CRMA output
+    crma_explanation::String           # rule that fired
+    traffic_light::String              # Green / Yellow / Orange / Red
 end
 
 """
@@ -501,6 +559,7 @@ function process_boundary(
     action_cpt::Matrix{Float64};
     include_agreement::Bool=true,
     include_tail_risk::Bool=false,
+    cost_loss_ratio::Float64=0.2,
 )::BoundaryResult
     ant_idx = categorize_antecedent(b.antecedent_rainfall_mm)
     exc_idx = categorize_exceedance(b.gefs_eprob_heavy)
@@ -517,6 +576,10 @@ function process_boundary(
         include_tail_risk,
     )
 
+    crma_idx, crma_expl = compute_crma_state(risk_probs; cost_loss_ratio)
+    crma_state = CRMA_STATES[crma_idx]
+    traffic_light = TRAFFIC_LIGHT[crma_state]
+
     risk_idx = argmax(risk_probs)
     action_idx = argmax(action_probs)
 
@@ -531,6 +594,9 @@ function process_boundary(
         ACTION_STATES[action_idx],
         action_probs,
         maximum(action_probs),
+        crma_state,
+        crma_expl,
+        traffic_light,
     )
 end
 
@@ -541,6 +607,7 @@ function process_all_boundaries(
     boundaries::Vector{BoundaryInput};
     include_agreement::Bool=true,
     include_tail_risk::Bool=false,
+    cost_loss_ratio::Float64=0.2,
 )::Vector{BoundaryResult}
     risk_cpt, _ = build_risk_cpt(; include_agreement, include_tail_risk)
     action_cpt = build_action_cpt()
@@ -548,7 +615,9 @@ function process_all_boundaries(
     results = Vector{BoundaryResult}(undef, length(boundaries))
 
     for (i, b) in enumerate(boundaries)
-        results[i] = process_boundary(b, risk_cpt, action_cpt; include_agreement, include_tail_risk)
+        results[i] = process_boundary(b, risk_cpt, action_cpt;
+                                      include_agreement, include_tail_risk,
+                                      cost_loss_ratio)
         if i % 50 == 0
             @info "Processed $i/$(length(boundaries)) boundaries"
         end
@@ -643,7 +712,8 @@ Run CSV-driven inference. Reads a prep CSV (one row per boundary) and writes
 a result CSV with the full risk + action probability vectors.
 """
 function run_csv(input_csv::String, output_csv::String;
-                 include_agreement::Bool, include_tail_risk::Bool)
+                 include_agreement::Bool, include_tail_risk::Bool,
+                 cost_loss_ratio::Float64=0.2)
     df = CSV.read(input_csv, DataFrames.DataFrame)
 
     has_ratio = "ens_max_ratio" in names(df)
@@ -668,8 +738,8 @@ function run_csv(input_csv::String, output_csv::String;
         )
     end
 
-    @info "Processing $(length(inputs)) boundaries (agreement=$include_agreement, tail_risk=$include_tail_risk)"
-    results = process_all_boundaries(inputs; include_agreement, include_tail_risk)
+    @info "Processing $(length(inputs)) boundaries (agreement=$include_agreement, tail_risk=$include_tail_risk, C/L=$cost_loss_ratio)"
+    results = process_all_boundaries(inputs; include_agreement, include_tail_risk, cost_loss_ratio)
 
     out = DataFrames.DataFrame(
         boundary_id         = [r.boundary_id for r in results],
@@ -678,6 +748,9 @@ function run_csv(input_csv::String, output_csv::String;
         antecedent_category = [r.antecedent_category for r in results],
         rainfall_trend      = [r.rainfall_trend for r in results],
         risk_level          = [r.risk_level for r in results],
+        crma_state          = [r.crma_state for r in results],
+        traffic_light       = [r.traffic_light for r in results],
+        crma_explanation    = [r.crma_explanation for r in results],
         recommended_action  = [r.recommended_action for r in results],
         confidence          = [r.confidence for r in results],
         risk_minimal        = [r.risk_probabilities[1] for r in results],
@@ -700,6 +773,8 @@ function run_csv(input_csv::String, output_csv::String;
     @info "Risk distribution:" risk_counts
     action_counts = DataFrames.combine(DataFrames.groupby(out, :recommended_action), DataFrames.nrow => :n)
     @info "Action distribution:" action_counts
+    crma_counts = DataFrames.combine(DataFrames.groupby(out, :crma_state), DataFrames.nrow => :n)
+    @info "CRMA state distribution:" crma_counts
 end
 
 function main()
@@ -712,9 +787,11 @@ function main()
     output_csv = getarg("--output-csv")
     include_agreement = !("--no-agreement" in ARGS)
     include_tail_risk = "--tail-risk" in ARGS
+    cl_str = getarg("--cost-loss-ratio")
+    cost_loss_ratio = cl_str === nothing ? 0.2 : parse(Float64, cl_str)
 
     if input_csv !== nothing && output_csv !== nothing
-        run_csv(input_csv, output_csv; include_agreement, include_tail_risk)
+        run_csv(input_csv, output_csv; include_agreement, include_tail_risk, cost_loss_ratio)
         return
     end
 
