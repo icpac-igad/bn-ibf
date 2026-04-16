@@ -172,9 +172,37 @@ julia --project=. flood_bn_ibf_v1.jl \
 ```
 
 ### Environment
-- Python deps install via `uv run --with …` on first call; no persistent env required.
-- Julia deps tracked in `Project.toml` / `Manifest.toml` (CSV.jl, DataFrames.jl; RxInfer.jl is optional).
-- Install Julia via `curl -fsSL https://install.julialang.org | sh -s -- --yes`.
+
+#### Python
+Scripts use the `uv run --with …` shebang — dependencies install transiently at
+first execution. No persistent conda/venv is required; `uv` is the only
+prerequisite (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+
+#### Julia
+Required: Julia ≥ 1.10. Install via `juliaup` and instantiate the project
+environment (pulls `CSV`, `DataFrames`, and `RxInfer` pinned by
+`Manifest.toml`):
+
+```bash
+# 1. Install juliaup + latest stable Julia (one-off)
+curl -fsSL https://install.julialang.org | sh -s -- --yes \
+     --default-channel release --background-selfupdate 0
+export PATH="$HOME/.juliaup/bin:$PATH"          # add to ~/.bashrc for persistence
+julia --version                                  # expect 1.10+ (tested on 1.12.6)
+
+# 2. Install project deps (CSV, DataFrames, RxInfer) into this repo's env
+cd flood_ibf
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+# 3. Smoke-test — first call compiles RxInfer (~30 s); subsequent calls are warm
+julia --project=. -e 'using RxInfer; println("RxInfer ", pkgversion(RxInfer))'
+```
+
+`RxInfer.jl` is **required** (not optional) as of the soft-evidence upgrade: the
+BN is now a proper `@model` with multi-parent `DiscreteTransition` tensor CPTs,
+and inference goes through RxInfer's reactive message passing so that the same
+code path handles both hard (one-hot) and soft (probability-vector) evidence on
+each parent. See `probabilistic_logic_v20260413.md` §8 for background.
 
 ---
 

@@ -19,15 +19,7 @@ using LinearAlgebra
 using Printf
 using CSV
 using DataFrames
-
-# RxInfer is optional: only needed for the reactive message-passing demo path.
-# Direct inference (infer_direct) uses pure matrix math and works without it.
-const HAS_RXINFER = try
-    @eval using RxInfer
-    true
-catch
-    false
-end
+using RxInfer                                                    # required
 
 # ============================================================================
 # CONSTANTS
@@ -350,6 +342,31 @@ function build_risk_cpt(; include_agreement::Bool=true, include_tail_risk::Bool=
 end
 
 """
+Build the risk CPT as a tensor, axis order matching the RxInfer
+DiscreteTransition call `risk ~ DiscreteTransition(ant, T, exc, spa, trn, tail)`.
+Shape: `(risk=5, ant=5, exc=5, spa=3, trn=3, tail=4)` when `include_tail_risk`,
+       `(risk=5, ant=5, exc=5, spa=3, trn=3)`          otherwise.
+`include_agreement=true` is not supported here — the library's exact
+rules top out at 5 conditioning parents; turn agreement into soft evidence
+on another node or run the legacy matmul path if you need it.
+"""
+function build_risk_cpt_tensor(; include_tail_risk::Bool=true)
+    if include_tail_risk
+        T = zeros(Float64, 5, 5, 5, 3, 3, 4)
+        for tl in 1:4, tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            T[:, ant, ex, sp, tr, tl] = compute_risk_probs(ant, ex, sp, tr, 3, tl)
+        end
+        return T
+    else
+        T = zeros(Float64, 5, 5, 5, 3, 3)
+        for tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+            T[:, ant, ex, sp, tr] = compute_risk_probs(ant, ex, sp, tr, 3, 1)
+        end
+        return T
+    end
+end
+
+"""
 Build the action CPT (4 × 5 matrix): action | risk_level.
 """
 function build_action_cpt()::Matrix{Float64}
@@ -472,47 +489,104 @@ function infer_direct(
 end
 
 # ============================================================================
-# RxInfer MODEL (reactive message-passing version)
-#
-# This defines the model using RxInfer's @model macro for cases where you
-# want to do more sophisticated inference (e.g., learning CPTs from data,
-# online/streaming updates, or handling missing evidence).
+# RxInfer MODEL — multi-parent discrete BN with soft-evidence support.
+# Verified pattern: each parent receives virtual evidence through a
+# `DiscreteTransition(parent, diageye(K))` channel whose observation is either
+# a one-hot vector (hard evidence) or a probability vector (soft evidence).
+# The risk-level posterior is queried by attaching a `missing` observation on
+# `risk_data`, which terminates the half-edge and triggers the forward marginal.
+# Ref: https://examples.rxinfer.com/categories/basic_examples/bayesian_networks/
 # ============================================================================
 
-if HAS_RXINFER
-    @eval @model function flood_bn_model(; risk_cpt_matrix, action_cpt_matrix, n_parent_combos)
-        parent_combo ~ Categorical(fill(1.0 / n_parent_combos, n_parent_combos))
-        risk_level ~ DiscreteTransition(parent_combo, risk_cpt_matrix)
-        action ~ DiscreteTransition(risk_level, action_cpt_matrix)
-    end
-
-    @eval function infer_rxinfer(
-        antecedent_idx::Int, exceedance_idx::Int, spatial_idx::Int,
-        trend_idx::Int, agreement_idx::Int; include_agreement::Bool=true,
-    )
-        risk_cpt, n_combos = build_risk_cpt(; include_agreement)
-        action_cpt = build_action_cpt()
-
-        parent_idx = if include_agreement
-            encode_parents(antecedent_idx, exceedance_idx, spatial_idx, trend_idx, agreement_idx)
-        else
-            encode_parents_no_agreement(antecedent_idx, exceedance_idx, spatial_idx, trend_idx)
-        end
-
-        parent_evidence = zeros(n_combos)
-        parent_evidence[parent_idx] = 1.0
-
-        result = infer(
-            model = flood_bn_model(;
-                risk_cpt_matrix  = risk_cpt,
-                action_cpt_matrix = action_cpt,
-                n_parent_combos  = n_combos,
-            ),
-            data = (parent_combo = parent_evidence,),
-        )
-        return probvec(result.posteriors[:risk_level]), probvec(result.posteriors[:action])
-    end
+@model function flood_bn_model_5parent(T, ant_data, exc_data, spa_data, trn_data, tail_data, risk_data)
+    ant  ~ Categorical(fill(1/5, 5))
+    exc  ~ Categorical(fill(1/5, 5))
+    spa  ~ Categorical(fill(1/3, 3))
+    trn  ~ Categorical(fill(1/3, 3))
+    tail ~ Categorical(fill(1/4, 4))
+    ant_data  ~ DiscreteTransition(ant,  diageye(5))
+    exc_data  ~ DiscreteTransition(exc,  diageye(5))
+    spa_data  ~ DiscreteTransition(spa,  diageye(3))
+    trn_data  ~ DiscreteTransition(trn,  diageye(3))
+    tail_data ~ DiscreteTransition(tail, diageye(4))
+    risk ~ DiscreteTransition(ant, T, exc, spa, trn, tail)
+    risk_data ~ DiscreteTransition(risk, diageye(5))
 end
+
+@model function flood_bn_model_4parent(T, ant_data, exc_data, spa_data, trn_data, risk_data)
+    ant  ~ Categorical(fill(1/5, 5))
+    exc  ~ Categorical(fill(1/5, 5))
+    spa  ~ Categorical(fill(1/3, 3))
+    trn  ~ Categorical(fill(1/3, 3))
+    ant_data  ~ DiscreteTransition(ant,  diageye(5))
+    exc_data  ~ DiscreteTransition(exc,  diageye(5))
+    spa_data  ~ DiscreteTransition(spa,  diageye(3))
+    trn_data  ~ DiscreteTransition(trn,  diageye(3))
+    risk ~ DiscreteTransition(ant, T, exc, spa, trn)
+    risk_data ~ DiscreteTransition(risk, diageye(5))
+end
+
+_rxinfer_init_5 = @initialization begin
+    q(ant)  = Categorical(fill(1/5, 5))
+    q(exc)  = Categorical(fill(1/5, 5))
+    q(spa)  = Categorical(fill(1/3, 3))
+    q(trn)  = Categorical(fill(1/3, 3))
+    q(tail) = Categorical(fill(1/4, 4))
+    q(risk) = Categorical(fill(1/5, 5))
+end
+
+_rxinfer_init_4 = @initialization begin
+    q(ant)  = Categorical(fill(1/5, 5))
+    q(exc)  = Categorical(fill(1/5, 5))
+    q(spa)  = Categorical(fill(1/3, 3))
+    q(trn)  = Categorical(fill(1/3, 3))
+    q(risk) = Categorical(fill(1/5, 5))
+end
+
+"""
+Soft-evidence inference via RxInfer. Each `*_ev` argument is a probability
+vector over that parent's states (one-hot = hard evidence). Returns
+`(risk_probs, action_probs)` so the caller can drop-in replace `infer_direct`.
+`iterations` controls the fixed number of message-passing rounds; 10 is the
+library's default for this idiom and converges on our fixed-CPT DAG.
+"""
+function infer_rxinfer_soft(
+    ant_ev::Vector{Float64},
+    exc_ev::Vector{Float64},
+    spa_ev::Vector{Float64},
+    trn_ev::Vector{Float64};
+    tail_ev::Union{Nothing,Vector{Float64}}=nothing,
+    risk_cpt_tensor::AbstractArray{Float64},
+    action_cpt::Matrix{Float64},
+    iterations::Int=10,
+)::Tuple{Vector{Float64},Vector{Float64}}
+    if tail_ev === nothing
+        r = infer(
+            model = flood_bn_model_4parent(T = risk_cpt_tensor),
+            data  = (ant_data = ant_ev, exc_data = exc_ev, spa_data = spa_ev,
+                     trn_data = trn_ev, risk_data = missing),
+            iterations     = iterations,
+            initialization = _rxinfer_init_4,
+        )
+    else
+        r = infer(
+            model = flood_bn_model_5parent(T = risk_cpt_tensor),
+            data  = (ant_data = ant_ev, exc_data = exc_ev, spa_data = spa_ev,
+                     trn_data = trn_ev, tail_data = tail_ev, risk_data = missing),
+            iterations     = iterations,
+            initialization = _rxinfer_init_5,
+        )
+    end
+    risk_probs   = Vector{Float64}(last(r.posteriors[:risk]).p)
+    action_probs = action_cpt * risk_probs
+    return risk_probs, action_probs
+end
+
+"""
+Build a one-hot probability vector of length `k` with 1.0 at position `idx`.
+Used to convert a hard categorical classification into soft-evidence form.
+"""
+onehot(idx::Int, k::Int) = (v = zeros(Float64, k); v[idx] = 1.0; v)
 
 # ============================================================================
 # BOUNDARY PROCESSING
@@ -532,7 +606,18 @@ struct BoundaryInput
     spatial_coverage::Float64
     forecast_agreement::String
     ens_max_ratio::Float64
+    # Optional soft-evidence vectors (nothing => derive one-hot from the hard
+    # categorisation above). Lengths must match the node state counts.
+    ant_probs::Union{Nothing,Vector{Float64}}
+    exc_probs::Union{Nothing,Vector{Float64}}
+    spa_probs::Union{Nothing,Vector{Float64}}
+    trn_probs::Union{Nothing,Vector{Float64}}
+    tail_probs::Union{Nothing,Vector{Float64}}
 end
+
+BoundaryInput(id, name, country, ant_mm, ant_cat, trend, eprob, spa_cov, agr, ratio) =
+    BoundaryInput(id, name, country, ant_mm, ant_cat, trend, eprob, spa_cov, agr, ratio,
+                  nothing, nothing, nothing, nothing, nothing)
 
 struct BoundaryResult
     boundary_id::String
@@ -551,7 +636,9 @@ struct BoundaryResult
 end
 
 """
-Process a single boundary through the BN.
+Process a single boundary through the BN via the legacy matmul path. Kept
+for validation and for the `include_agreement=true` case that exceeds
+RxInfer's multi-parent tensor arity.
 """
 function process_boundary(
     b::BoundaryInput,
@@ -576,50 +663,104 @@ function process_boundary(
         include_tail_risk,
     )
 
+    return _assemble_result(b, ant_idx, tre_idx, risk_probs, action_probs, cost_loss_ratio)
+end
+
+"""
+Process a single boundary through the BN via RxInfer's message passing.
+Accepts soft evidence if `BoundaryInput` carries per-state probability
+vectors; otherwise constructs one-hot evidence from the hard categorisation.
+"""
+function process_boundary_rxinfer(
+    b::BoundaryInput,
+    risk_cpt_tensor::AbstractArray{Float64},
+    action_cpt::Matrix{Float64};
+    include_tail_risk::Bool=false,
+    cost_loss_ratio::Float64=0.2,
+    iterations::Int=10,
+)::BoundaryResult
+    ant_idx = categorize_antecedent(b.antecedent_rainfall_mm)
+    exc_idx = categorize_exceedance(b.gefs_eprob_heavy)
+    spa_idx = categorize_spatial(b.spatial_coverage)
+    tre_idx = categorize_trend(b.rainfall_trend)
+    tl_idx  = categorize_tail_risk(b.ens_max_ratio)
+
+    ant_ev = b.ant_probs === nothing ? onehot(ant_idx, 5) : b.ant_probs
+    exc_ev = b.exc_probs === nothing ? onehot(exc_idx, 5) : b.exc_probs
+    spa_ev = b.spa_probs === nothing ? onehot(spa_idx, 3) : b.spa_probs
+    trn_ev = b.trn_probs === nothing ? onehot(tre_idx, 3) : b.trn_probs
+    tail_ev = include_tail_risk ?
+              (b.tail_probs === nothing ? onehot(tl_idx, 4) : b.tail_probs) :
+              nothing
+
+    risk_probs, action_probs = infer_rxinfer_soft(
+        ant_ev, exc_ev, spa_ev, trn_ev;
+        tail_ev = tail_ev,
+        risk_cpt_tensor = risk_cpt_tensor,
+        action_cpt = action_cpt,
+        iterations = iterations,
+    )
+
+    return _assemble_result(b, ant_idx, tre_idx, risk_probs, action_probs, cost_loss_ratio)
+end
+
+function _assemble_result(b::BoundaryInput, ant_idx::Int, tre_idx::Int,
+                           risk_probs::Vector{Float64}, action_probs::Vector{Float64},
+                           cost_loss_ratio::Float64)::BoundaryResult
     crma_idx, crma_expl = compute_crma_state(risk_probs; cost_loss_ratio)
     crma_state = CRMA_STATES[crma_idx]
     traffic_light = TRAFFIC_LIGHT[crma_state]
-
-    risk_idx = argmax(risk_probs)
-    action_idx = argmax(action_probs)
-
     return BoundaryResult(
-        b.id,
-        b.name,
-        b.country,
+        b.id, b.name, b.country,
         ANTECEDENT_STATES[ant_idx],
         TREND_STATES[tre_idx],
-        RISK_STATES[risk_idx],
+        RISK_STATES[argmax(risk_probs)],
         risk_probs,
-        ACTION_STATES[action_idx],
+        ACTION_STATES[argmax(action_probs)],
         action_probs,
         maximum(action_probs),
-        crma_state,
-        crma_expl,
-        traffic_light,
+        crma_state, crma_expl, traffic_light,
     )
 end
 
 """
 Process all boundaries. Pre-builds CPTs once for efficiency.
+
+`use_rxinfer=true` (default) routes through the reactive message-passing engine
+with soft-evidence support. `use_rxinfer=false` falls back to the direct-matmul
+path, which is currently the only option when `include_agreement=true` (the
+library's exact `DiscreteTransition` rules top out at 5 conditioning parents).
 """
 function process_all_boundaries(
     boundaries::Vector{BoundaryInput};
     include_agreement::Bool=true,
     include_tail_risk::Bool=false,
     cost_loss_ratio::Float64=0.2,
+    use_rxinfer::Bool=true,
 )::Vector{BoundaryResult}
-    risk_cpt, _ = build_risk_cpt(; include_agreement, include_tail_risk)
     action_cpt = build_action_cpt()
-
     results = Vector{BoundaryResult}(undef, length(boundaries))
 
-    for (i, b) in enumerate(boundaries)
-        results[i] = process_boundary(b, risk_cpt, action_cpt;
-                                      include_agreement, include_tail_risk,
-                                      cost_loss_ratio)
-        if i % 50 == 0
-            @info "Processed $i/$(length(boundaries)) boundaries"
+    if use_rxinfer && !include_agreement
+        T = build_risk_cpt_tensor(; include_tail_risk)
+        for (i, b) in enumerate(boundaries)
+            results[i] = process_boundary_rxinfer(b, T, action_cpt;
+                                                  include_tail_risk, cost_loss_ratio)
+            if i % 50 == 0
+                @info "Processed $i/$(length(boundaries)) boundaries (RxInfer)"
+            end
+        end
+    else
+        if use_rxinfer && include_agreement
+            @info "include_agreement=true has 6 parents; RxInfer tensor arity insufficient — using matmul path"
+        end
+        risk_cpt, _ = build_risk_cpt(; include_agreement, include_tail_risk)
+        for (i, b) in enumerate(boundaries)
+            results[i] = process_boundary(b, risk_cpt, action_cpt;
+                                          include_agreement, include_tail_risk, cost_loss_ratio)
+            if i % 50 == 0
+                @info "Processed $i/$(length(boundaries)) boundaries (matmul)"
+            end
         end
     end
 
@@ -713,17 +854,33 @@ a result CSV with the full risk + action probability vectors.
 """
 function run_csv(input_csv::String, output_csv::String;
                  include_agreement::Bool, include_tail_risk::Bool,
-                 cost_loss_ratio::Float64=0.2)
+                 cost_loss_ratio::Float64=0.2,
+                 use_rxinfer::Bool=true)
     df = CSV.read(input_csv, DataFrames.DataFrame)
+    colnames = names(df)
 
-    has_ratio = "ens_max_ratio" in names(df)
+    has_ratio = "ens_max_ratio" in colnames
     if include_tail_risk && !has_ratio
         @warn "--tail-risk requested but ens_max_ratio column not in CSV; disabling"
         include_tail_risk = false
     end
 
+    # Optional soft-evidence columns: ant_p1..ant_p5, exc_p1..exc_p5,
+    # spa_p1..spa_p3, trn_p1..trn_p3, tail_p1..tail_p4. All-or-nothing per node.
+    _soft(prefix::String, k::Int, row) = all("$(prefix)_p$i" in colnames for i in 1:k) ?
+        [Float64(row["$(prefix)_p$i"]) for i in 1:k] : nothing
+
     inputs = Vector{BoundaryInput}(undef, DataFrames.nrow(df))
+    n_soft_rows = 0
     for (i, row) in enumerate(DataFrames.eachrow(df))
+        ant_p  = _soft("ant",  5, row)
+        exc_p  = _soft("exc",  5, row)
+        spa_p  = _soft("spa",  3, row)
+        trn_p  = _soft("trn",  3, row)
+        tail_p = _soft("tail", 4, row)
+        if any(x -> x !== nothing, (ant_p, exc_p, spa_p, trn_p, tail_p))
+            n_soft_rows += 1
+        end
         inputs[i] = BoundaryInput(
             String(row.id),
             String(row.name),
@@ -735,11 +892,14 @@ function run_csv(input_csv::String, output_csv::String;
             Float64(row.spatial_coverage),
             String(row.forecast_agreement),
             has_ratio ? Float64(row.ens_max_ratio) : 0.0,
+            ant_p, exc_p, spa_p, trn_p, tail_p,
         )
     end
 
-    @info "Processing $(length(inputs)) boundaries (agreement=$include_agreement, tail_risk=$include_tail_risk, C/L=$cost_loss_ratio)"
-    results = process_all_boundaries(inputs; include_agreement, include_tail_risk, cost_loss_ratio)
+    backend = use_rxinfer && !include_agreement ? "RxInfer" : "matmul"
+    @info "Processing $(length(inputs)) boundaries (backend=$backend agreement=$include_agreement tail_risk=$include_tail_risk C/L=$cost_loss_ratio soft_rows=$n_soft_rows)"
+    results = process_all_boundaries(inputs; include_agreement, include_tail_risk,
+                                      cost_loss_ratio, use_rxinfer)
 
     out = DataFrames.DataFrame(
         boundary_id         = [r.boundary_id for r in results],
@@ -789,14 +949,16 @@ function main()
     include_tail_risk = "--tail-risk" in ARGS
     cl_str = getarg("--cost-loss-ratio")
     cost_loss_ratio = cl_str === nothing ? 0.2 : parse(Float64, cl_str)
+    use_rxinfer = !("--legacy-inference" in ARGS)
 
     if input_csv !== nothing && output_csv !== nothing
-        run_csv(input_csv, output_csv; include_agreement, include_tail_risk, cost_loss_ratio)
+        run_csv(input_csv, output_csv; include_agreement, include_tail_risk,
+                cost_loss_ratio, use_rxinfer)
         return
     end
 
-    @info "Flood BN IBF v1 (Julia/RxInfer port)"
-    @info "Usage: julia flood_bn_ibf_v1.jl --input-csv IN.csv --output-csv OUT.csv [--no-agreement] [--tail-risk]"
+    @info "Flood BN IBF v1 (Julia/RxInfer)"
+    @info "Usage: julia flood_bn_ibf_v1.jl --input-csv IN.csv --output-csv OUT.csv [--no-agreement] [--tail-risk] [--legacy-inference] [--cost-loss-ratio 0.2]"
     @info "       julia flood_bn_ibf_v1.jl --test"
 
     b = BoundaryInput(
