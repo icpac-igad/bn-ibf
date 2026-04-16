@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --with icechunk --with xarray --with "zarr>=3" --with numpy --with pandas --with geopandas --with regionmask --with netcdf4 --with pyarrow --with scipy
+#!/usr/bin/env -S uv run --with icechunk --with xarray --with "zarr>=3" --with numpy --with pandas --with geopandas --with regionmask --with netcdf4 --with pyarrow --with scipy --with fsspec --with s3fs
 """
 Flood BN IBF v1 — per-day admin-1 input generator.
 
@@ -58,6 +58,65 @@ def open_icechunk(prefix: str) -> xr.Dataset:
         consolidated=False,
         decode_timedelta=True,
     )
+
+
+def open_ecmwf_store(pencil: bool) -> xr.Dataset:
+    """Select the pencil zarr (per-pixel-member friendly) or the pancake
+    icechunk mirror (full-grid friendly). Benchmark 2026-04-16: for the
+    current full-init zonal-statistics pipeline, icechunk is ~4× faster;
+    the pencil store is the right default once per-pixel soft-evidence
+    propagation lands (upgrade #4 deep-path)."""
+    if not pencil:
+        return open_icechunk("forecasts/ecmwf_ea_tp_icechunk")
+    import fsspec
+    fs = fsspec.filesystem(
+        "s3", anon=True,
+        client_kwargs={"endpoint_url": "https://data.source.coop"},
+    )
+    return xr.open_zarr(
+        fs.get_mapper("e4drr-project/forecasts/ecmwf_ea_tp_pencil_zarr"),
+        consolidated=False, decode_timedelta=True,
+    )
+
+
+# Soft-evidence binning: mirrors the Julia categorize_* cutoffs in
+# flood_bn_ibf_v1.jl so the one-hot limit of these vectors reproduces the
+# legacy hard-classification. Sigmas are ~30% of the narrowest bin spacing
+# and can be tuned per-node if/when we plug in real physical uncertainty
+# (IMERG retrieval noise, ensemble sampling std, Gumbel-fit posterior, …).
+_NODE_EDGES = {
+    "ant":  [-np.inf, 10.0, 30.0, 60.0, 100.0, np.inf],
+    "exc":  [-np.inf, 0.2, 0.4, 0.6, 0.8, np.inf],
+    "spa":  [-np.inf, 0.3, 0.6, np.inf],
+    "trn":  [-np.inf, -2.0, 2.0, np.inf],
+    "tail": [-np.inf, 0.5, 1.0, 2.0, np.inf],
+}
+_NODE_SIGMA_DEFAULT = {"ant": 10.0, "exc": 0.05, "spa": 0.05, "trn": 1.0, "tail": 0.15}
+
+
+def soft_bin(x: float, node: str, sigma: float | None = None) -> np.ndarray:
+    from scipy import stats as _st
+    edges = _NODE_EDGES[node]
+    k = len(edges) - 1
+    if not np.isfinite(x):
+        return np.full(k, 1.0 / k)
+    s = _NODE_SIGMA_DEFAULT[node] if sigma is None else sigma
+    probs = np.diff(_st.norm.cdf(edges, loc=x, scale=s))
+    tot = probs.sum()
+    return probs / tot if tot > 0 else np.full(k, 1.0 / k)
+
+
+def add_soft_columns(df: pd.DataFrame,
+                     ant_mm: np.ndarray, exc: np.ndarray,
+                     spa: np.ndarray, trn_slope: np.ndarray,
+                     tail_ratio: np.ndarray) -> None:
+    """In-place: add 5+5+3+3+4=20 soft-evidence columns (ant/exc/spa/trn/tail)."""
+    blocks = [("ant", ant_mm, 5), ("exc", exc, 5), ("spa", spa, 3),
+              ("trn", trn_slope, 3), ("tail", tail_ratio, 4)]
+    for node, vals, k in blocks:
+        probs = np.vstack([soft_bin(float(v), node) for v in vals])
+        for i in range(k):
+            df[f"{node}_p{i+1}"] = np.round(probs[:, i], 4)
 
 
 def imerg_daily_totals(imerg: xr.Dataset, date_utc: pd.Timestamp) -> xr.DataArray:
@@ -285,6 +344,12 @@ def main() -> None:
     ap.add_argument("--trend-band", type=float, default=2.0)
     ap.add_argument("--member-sidecar", default=None,
                     help="Optional per-member sidecar CSV path (long format)")
+    ap.add_argument("--soft-evidence", action="store_true",
+                    help="Emit Gaussian-soft-binned probability columns "
+                         "{ant,exc,spa,trn,tail}_p{1..K} alongside the hard class")
+    ap.add_argument("--pencil", action="store_true",
+                    help="Read ECMWF from the pencil-chunked zarr mirror "
+                         "(forecasts/ecmwf_ea_tp_pencil_zarr) instead of the icechunk store")
     args = ap.parse_args()
 
     D = pd.Timestamp(args.date)
@@ -320,8 +385,8 @@ def main() -> None:
     trend_cls = np.array([classify_trend(s, args.trend_band) for s in slopes])
 
     # ---------------- ECMWF exceedance ----------------
-    print("[prep] opening ECMWF icechunk...")
-    ecmwf = open_icechunk("forecasts/ecmwf_ea_tp_icechunk")
+    print(f"[prep] opening ECMWF {'pencil zarr' if args.pencil else 'icechunk'}...")
+    ecmwf = open_ecmwf_store(args.pencil)
     init_dates = pd.to_datetime(ecmwf.init_date.values)
     if D not in init_dates:
         raise SystemExit(f"[prep] init_date {D.date()} not in ECMWF store "
@@ -415,10 +480,19 @@ def main() -> None:
         "target_date": str(D.date()),
     })
 
+    if args.soft_evidence:
+        add_soft_columns(df,
+                         ant_mm     = antecedent_mm,
+                         exc        = eprob_heavy_adm,
+                         spa        = spatial_cov_final,
+                         trn_slope  = slopes,
+                         tail_ratio = max_ratio_p95_adm)
+        print(f"[prep] soft-evidence columns added (20 cols)")
+
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
-    print(f"[prep] wrote {out}  rows={len(df)}  "
+    print(f"[prep] wrote {out}  rows={len(df)}  cols={len(df.columns)}  "
           f"ant_mean={np.nanmean(antecedent_mm):.1f}mm  "
           f"heavy_mean={np.nanmean(eprob_heavy_adm):.3f}")
 
