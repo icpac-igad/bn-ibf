@@ -324,6 +324,93 @@ def compute_per_member_ratios(
     return pd.DataFrame(rows)
 
 
+def compute_per_member_evidence(
+    accums: dict[str, xr.DataArray],
+    thresh_ec: dict[str, xr.DataArray],
+    mask: xr.DataArray,
+    adm1: gpd.GeoDataFrame,
+    n_regions: int,
+    antecedent_mm: np.ndarray,
+    slopes: np.ndarray,
+    trend_band: float,
+    target_date: str,
+    soft: bool = False,
+) -> pd.DataFrame:
+    """Full per-member evidence for storyline BN runs.
+    For each (boundary, member) emit: antecedent (shared), trend (shared),
+    per-member exceedance fraction, spatial coverage, max_ratio, and optional
+    soft-evidence columns.
+    """
+    durations = list(accums.keys())
+    members = accums[durations[0]].member.values
+    n_mem = len(members)
+    n_lat = accums[durations[0]].sizes["lat"]
+    n_lon = accums[durations[0]].sizes["lon"]
+    mask_vals = mask.values
+
+    # Per-member, per-pixel: max-over-durations of (accum / threshold)
+    per_member_ratio = np.zeros((n_mem, n_lat, n_lon), dtype="float32")
+    # Per-member, per-pixel: does any duration exceed threshold? (binary)
+    per_member_exceed = np.zeros((n_mem, n_lat, n_lon), dtype="float32")
+    for dur in durations:
+        a = accums[dur].values           # (member, lat, lon)
+        t = thresh_ec[dur].values        # (lat, lon)
+        safe_t = np.where(t > 0, t, np.inf)
+        r = a / safe_t[None, :, :]
+        per_member_ratio = np.maximum(per_member_ratio, r)
+        per_member_exceed = np.maximum(per_member_exceed,
+                                        (a >= t[None, :, :]).astype("float32"))
+
+    rows = []
+    for r_idx in range(n_regions):
+        sel = mask_vals == r_idx
+        gid = adm1.iloc[r_idx]["GID_1"]
+        nm = adm1.iloc[r_idx]["NAME_1"]
+        cc = ISO_TO_COUNTRY.get(gid.split(".")[0], "Unknown")
+        ant_mm_val = float(antecedent_mm[r_idx])
+        slope_val = float(slopes[r_idx])
+        trend_str = classify_trend(slope_val, trend_band)
+
+        for m_idx, m in enumerate(members):
+            if sel.any():
+                pix_ratio = per_member_ratio[m_idx, sel]
+                pix_exceed = per_member_exceed[m_idx, sel]
+                mratio = float(np.quantile(pix_ratio[np.isfinite(pix_ratio)], 0.95)) \
+                    if np.isfinite(pix_ratio).any() else 0.0
+                mexc = float(np.mean(pix_exceed))
+                mspa = float(np.mean(pix_exceed >= 0.5)) if pix_exceed.size > 0 else 0.0
+            else:
+                # centroid fallback
+                pt = adm1.iloc[r_idx].geometry.centroid
+                lat_v = accums[durations[0]].lat.values
+                lon_v = accums[durations[0]].lon.values
+                i = int(np.argmin(np.abs(lat_v - pt.y)))
+                j = int(np.argmin(np.abs(lon_v - pt.x)))
+                mratio = float(per_member_ratio[m_idx, i, j])
+                mexc = float(per_member_exceed[m_idx, i, j])
+                mspa = mexc
+
+            row = {
+                "boundary_id": gid, "boundary_name": nm, "country": cc,
+                "member": str(m), "target_date": target_date,
+                "antecedent_rainfall_mm": round(ant_mm_val, 3),
+                "rainfall_trend": trend_str,
+                "trend_slope_mm_per_day": round(slope_val, 3),
+                "member_exc_frac": round(mexc, 4),
+                "member_spa_cov": round(mspa, 4),
+                "member_max_ratio": round(mratio, 4),
+            }
+            if soft:
+                for node, val, k in [("ant", ant_mm_val, 5), ("exc", mexc, 5),
+                                      ("spa", mspa, 3), ("trn", slope_val, 3),
+                                      ("tail", mratio, 4)]:
+                    probs = soft_bin(val, node)
+                    for ki in range(k):
+                        row[f"{node}_p{ki+1}"] = round(float(probs[ki]), 4)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def classify_trend(slope: float, band: float) -> str:
     if not np.isfinite(slope):
         return "Stable"
@@ -350,6 +437,9 @@ def main() -> None:
     ap.add_argument("--pencil", action="store_true",
                     help="Read ECMWF from the pencil-chunked zarr mirror "
                          "(forecasts/ecmwf_ea_tp_pencil_zarr) instead of the icechunk store")
+    ap.add_argument("--member-evidence-sidecar", default=None,
+                    help="Enriched per-member sidecar CSV with full 5-parent evidence "
+                         "for storyline BN runs (one row per boundary × member)")
     args = ap.parse_args()
 
     D = pd.Timestamp(args.date)
@@ -495,6 +585,20 @@ def main() -> None:
     print(f"[prep] wrote {out}  rows={len(df)}  cols={len(df.columns)}  "
           f"ant_mean={np.nanmean(antecedent_mm):.1f}mm  "
           f"heavy_mean={np.nanmean(eprob_heavy_adm):.3f}")
+
+    if args.member_evidence_sidecar:
+        me_df = compute_per_member_evidence(
+            accums, thresh_ec, ec_mask, adm1, n_adm,
+            antecedent_mm, slopes, args.trend_band,
+            target_date=str(D.date()),
+            soft=args.soft_evidence,
+        )
+        me_path = Path(args.member_evidence_sidecar)
+        me_path.parent.mkdir(parents=True, exist_ok=True)
+        me_df.to_csv(me_path, index=False)
+        n_crossing = (me_df["member_max_ratio"] >= 1.0).sum()
+        print(f"[prep] wrote member-evidence sidecar {me_path}  rows={len(me_df)}  "
+              f"threshold_crossing={n_crossing} ({n_crossing/len(me_df)*100:.1f}%)")
 
     if args.member_sidecar:
         member_df = compute_per_member_ratios(accums, thresh_ec, ec_mask, adm1, n_adm)

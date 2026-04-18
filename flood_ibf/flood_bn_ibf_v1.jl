@@ -837,6 +837,264 @@ function self_test()
 end
 
 # ============================================================================
+# FAST SOFT-EVIDENCE INFERENCE (tensor contraction — for bulk storyline runs)
+# ============================================================================
+
+"""
+Direct tensor contraction for soft evidence. Mathematically identical to
+RxInfer's message passing but runs in O(prod(state_sizes)) ≈ 22k ops per
+boundary — sub-microsecond. Used for the 115k+ per-member storyline
+inferences where RxInfer's per-call overhead dominates.
+"""
+function infer_soft_matmul(
+    ant_ev::Vector{Float64}, exc_ev::Vector{Float64},
+    spa_ev::Vector{Float64}, trn_ev::Vector{Float64},
+    tail_ev::Vector{Float64},
+    T::Array{Float64},
+    action_cpt::Matrix{Float64},
+)::Tuple{Vector{Float64},Vector{Float64}}
+    risk_probs = zeros(Float64, 5)
+    @inbounds for tl in 1:4, tr in 1:3, sp in 1:3, ex in 1:5, ant in 1:5
+        w = ant_ev[ant] * exc_ev[ex] * spa_ev[sp] * trn_ev[tr] * tail_ev[tl]
+        for r in 1:5
+            risk_probs[r] += T[r, ant, ex, sp, tr, tl] * w
+        end
+    end
+    s = sum(risk_probs)
+    if s > 0; risk_probs ./= s; end
+    return risk_probs, action_cpt * risk_probs
+end
+
+# ============================================================================
+# DYNAMIC BAYESIAN NETWORK — temporal chaining across days
+# ============================================================================
+
+"""
+Blend yesterday's risk posterior with a uniform to control temporal persistence.
+`decay=0.6` → 60% yesterday + 40% uniform. `decay=0.0` → no memory (static BN).
+"""
+function blend_temporal_prior(yesterday::Vector{Float64}; decay::Float64=0.6)::Vector{Float64}
+    v = decay .* yesterday .+ (1.0 - decay) .* fill(0.2, 5)
+    return v ./ sum(v)
+end
+
+"""
+Run the BN as a Dynamic Bayesian Network across a sequence of daily input CSVs.
+Yesterday's risk posterior is fed as soft virtual evidence on `risk_data` at
+time `t`, implementing the temporal link P(risk_t | evidence_t, risk_{t-1}).
+
+The `lookback` parameter controls how many days of accumulated posterior to
+carry forward (default 7, matching the forecast horizon). After `lookback` days
+the chain resets to a uniform prior.
+
+Returns a single long-format DataFrame with all days.
+"""
+function run_dbn_sequence(
+    input_csvs::Vector{String};
+    include_tail_risk::Bool=true,
+    cost_loss_ratio::Float64=0.2,
+    temporal_decay::Float64=0.6,
+    lookback::Int=7,
+)
+    T = build_risk_cpt_tensor(; include_tail_risk)
+    action_cpt = build_action_cpt()
+
+    # boundary_id → yesterday's risk posterior
+    prev = Dict{String, Vector{Float64}}()
+    # boundary_id → how many consecutive days of posterior we've chained
+    chain_len = Dict{String, Int}()
+
+    all_frames = DataFrames.DataFrame[]
+
+    for (day_idx, csv_path) in enumerate(input_csvs)
+        df = CSV.read(csv_path, DataFrames.DataFrame)
+        colnames = names(df)
+        has_ratio = "ens_max_ratio" in colnames
+        _soft(prefix, k, row) = all("$(prefix)_p$i" in colnames for i in 1:k) ?
+            Float64[row["$(prefix)_p$i"] for i in 1:k] : nothing
+
+        target_date = "target_date" in colnames ? string(df[1, :target_date]) : "day_$day_idx"
+
+        n = DataFrames.nrow(df)
+        out_rows = Vector{NamedTuple}(undef, n)
+
+        for (i, row) in enumerate(DataFrames.eachrow(df))
+            bid = String(row.id)
+
+            ant_idx = categorize_antecedent(Float64(row.antecedent_rainfall_mm))
+            exc_idx = categorize_exceedance(Float64(row.gefs_eprob_heavy))
+            spa_idx = categorize_spatial(Float64(row.spatial_coverage))
+            tre_idx = categorize_trend(String(row.rainfall_trend))
+            tl_idx  = has_ratio ? categorize_tail_risk(Float64(row.ens_max_ratio)) : 1
+
+            ant_ev = something(_soft("ant", 5, row), onehot(ant_idx, 5))
+            exc_ev = something(_soft("exc", 5, row), onehot(exc_idx, 5))
+            spa_ev = something(_soft("spa", 3, row), onehot(spa_idx, 3))
+            trn_ev = something(_soft("trn", 3, row), onehot(tre_idx, 3))
+            tail_ev = include_tail_risk ?
+                      something(_soft("tail", 4, row), onehot(tl_idx, 4)) :
+                      onehot(1, 4)
+
+            # Temporal prior from yesterday
+            yesterday = get(prev, bid, nothing)
+            cl = get(chain_len, bid, 0)
+            if yesterday !== nothing && cl < lookback
+                risk_ev = blend_temporal_prior(yesterday; decay=temporal_decay)
+            else
+                risk_ev = nothing  # reset or first day
+            end
+
+            # Inference via fast matmul (exact, handles soft evidence)
+            risk_probs, action_probs = infer_soft_matmul(
+                ant_ev, exc_ev, spa_ev, trn_ev, tail_ev, T, action_cpt)
+
+            # Apply temporal prior as multiplicative virtual evidence
+            if risk_ev !== nothing
+                risk_probs .*= risk_ev
+                s = sum(risk_probs)
+                if s > 0; risk_probs ./= s; end
+                action_probs = action_cpt * risk_probs
+            end
+
+            # Store for tomorrow
+            prev[bid] = copy(risk_probs)
+            chain_len[bid] = (yesterday !== nothing ? cl + 1 : 1)
+
+            crma_idx, crma_expl = compute_crma_state(risk_probs; cost_loss_ratio)
+
+            out_rows[i] = (
+                target_date     = target_date,
+                dbn_day         = day_idx,
+                boundary_id     = bid,
+                boundary_name   = String(row.name),
+                country         = String(row.country),
+                risk_level      = RISK_STATES[argmax(risk_probs)],
+                crma_state      = CRMA_STATES[crma_idx],
+                traffic_light   = TRAFFIC_LIGHT[CRMA_STATES[crma_idx]],
+                crma_explanation = crma_expl,
+                risk_minimal    = risk_probs[1],
+                risk_low        = risk_probs[2],
+                risk_moderate   = risk_probs[3],
+                risk_high       = risk_probs[4],
+                risk_extreme    = risk_probs[5],
+                temporal_prior  = risk_ev !== nothing,
+                p_high_extreme  = risk_probs[4] + risk_probs[5],
+            )
+        end
+        push!(all_frames, DataFrames.DataFrame(out_rows))
+        @info "DBN day $day_idx ($target_date): $(n) boundaries"
+    end
+    return vcat(all_frames...)
+end
+
+# ============================================================================
+# STORYLINE SELECTION — per-member BN + worst/median/best picker
+# ============================================================================
+
+"""
+Run the BN on per-member evidence CSV (one row per boundary × member).
+Each member gets its own exceedance, spatial coverage, and tail risk;
+antecedent and trend are shared (IMERG observations).
+
+Returns a DataFrame with risk posteriors per (boundary, member).
+"""
+function run_per_member_bn(
+    member_csv::String;
+    include_tail_risk::Bool=true,
+    cost_loss_ratio::Float64=0.2,
+)
+    df = CSV.read(member_csv, DataFrames.DataFrame)
+    T = build_risk_cpt_tensor(; include_tail_risk)
+    action_cpt = build_action_cpt()
+    colnames = names(df)
+
+    _soft(prefix, k, row) = all("$(prefix)_p$i" in colnames for i in 1:k) ?
+        Float64[row["$(prefix)_p$i"] for i in 1:k] : nothing
+
+    n = DataFrames.nrow(df)
+    out = Vector{NamedTuple}(undef, n)
+
+    for (i, row) in enumerate(DataFrames.eachrow(df))
+        ant_idx = categorize_antecedent(Float64(row.antecedent_rainfall_mm))
+        exc_idx = categorize_exceedance(Float64(row.member_exc_frac))
+        spa_idx = categorize_spatial(Float64(row.member_spa_cov))
+        tre_idx = categorize_trend(String(row.rainfall_trend))
+        tl_idx  = categorize_tail_risk(Float64(row.member_max_ratio))
+
+        ant_ev  = something(_soft("ant", 5, row), onehot(ant_idx, 5))
+        exc_ev  = something(_soft("exc", 5, row), onehot(exc_idx, 5))
+        spa_ev  = something(_soft("spa", 3, row), onehot(spa_idx, 3))
+        trn_ev  = something(_soft("trn", 3, row), onehot(tre_idx, 3))
+        tail_ev = something(_soft("tail", 4, row), onehot(tl_idx, 4))
+
+        risk_probs, _ = infer_soft_matmul(ant_ev, exc_ev, spa_ev, trn_ev, tail_ev, T, action_cpt)
+        crma_idx, _ = compute_crma_state(risk_probs; cost_loss_ratio)
+
+        out[i] = (
+            boundary_id    = String(row.boundary_id),
+            boundary_name  = String(row.boundary_name),
+            country        = String(row.country),
+            member         = String(row.member),
+            target_date    = string(row.target_date),
+            risk_level     = RISK_STATES[argmax(risk_probs)],
+            crma_state     = CRMA_STATES[crma_idx],
+            p_high_extreme = risk_probs[4] + risk_probs[5],
+            risk_minimal   = risk_probs[1],
+            risk_low       = risk_probs[2],
+            risk_moderate  = risk_probs[3],
+            risk_high      = risk_probs[4],
+            risk_extreme   = risk_probs[5],
+            member_max_ratio = Float64(row.member_max_ratio),
+            member_exc_frac  = Float64(row.member_exc_frac),
+        )
+    end
+    return DataFrames.DataFrame(out)
+end
+
+"""
+Select worst / median / best storylines per boundary from per-member BN results.
+"Worst" = member with highest P(High∪Extreme) — "the world that scares me".
+"""
+function select_storylines(member_results::DataFrames.DataFrame)
+    groups = DataFrames.groupby(member_results, [:boundary_id, :target_date])
+    rows = NamedTuple[]
+
+    for g in groups
+        sorted = sort(g, :p_high_extreme, rev=true)
+        n = DataFrames.nrow(sorted)
+        picks = [
+            ("worst",  sorted[1, :]),
+            ("median", sorted[div(n, 2) + 1, :]),
+            ("best",   sorted[n, :]),
+        ]
+        for (stype, r) in picks
+            # How likely is a world at least this bad?
+            n_ge = sum(sorted.p_high_extreme .>= r.p_high_extreme)
+            push!(rows, (
+                storyline       = stype,
+                boundary_id     = r.boundary_id,
+                boundary_name   = r.boundary_name,
+                country         = r.country,
+                target_date     = r.target_date,
+                member          = r.member,
+                risk_level      = r.risk_level,
+                crma_state      = r.crma_state,
+                p_high_extreme  = r.p_high_extreme,
+                risk_minimal    = r.risk_minimal,
+                risk_low        = r.risk_low,
+                risk_moderate   = r.risk_moderate,
+                risk_high       = r.risk_high,
+                risk_extreme    = r.risk_extreme,
+                member_max_ratio = r.member_max_ratio,
+                probability     = round(n_ge / n, digits=3),  # P(world ≥ this bad)
+                n_members       = n,
+            ))
+        end
+    end
+    return DataFrames.DataFrame(rows)
+end
+
+# ============================================================================
 # CLI ENTRY POINT
 # ============================================================================
 
