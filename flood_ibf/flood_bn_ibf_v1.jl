@@ -1053,7 +1053,7 @@ end
 
 """
 Select worst / median / best storylines per boundary from per-member BN results.
-"Worst" = member with highest P(High∪Extreme) — "the world that scares me".
+"Worst" = member with highest P(High∪Extreme) — the highest-risk plausible future.
 """
 function select_storylines(member_results::DataFrames.DataFrame)
     groups = DataFrames.groupby(member_results, [:boundary_id, :target_date])
