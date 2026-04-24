@@ -1,156 +1,224 @@
-<mxfile host="app.diagrams.net" modified="2026-04-12T00:00:00.000Z" agent="Claude" version="24.0.0">
-  <diagram name="Flood BN IBF v1" id="flood-bn-dag">
-    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+<mxfile host="app.diagrams.net" modified="2026-04-20T00:00:00.000Z" agent="Claude" version="24.0.0">
+  <diagram name="Flood BN IBF v2 — Soft Evidence + DBN + Storylines" id="flood-bn-dag-v2">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
 
         <!-- Title -->
-        <mxCell id="title" value="&lt;b&gt;Flood BN IBF v1 — Bayesian Network Structure&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Expert-elicited discrete BN for short-term flood risk assessment (East Africa, admin-1 level)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;" vertex="1" parent="1">
-          <mxGeometry x="300" y="20" width="700" height="50" as="geometry"/>
+        <mxCell id="title" value="&lt;b&gt;Flood BN IBF v2 — Soft-Evidence Dynamic Bayesian Network&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Expert CPT + Gaussian soft-binning (Pearl virtual evidence) + DBN temporal coupling + per-member storylines (East Africa, admin-1)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="250" y="15" width="1200" height="60" as="geometry"/>
         </mxCell>
 
-        <!-- ============ EVIDENCE NODES (root / observed) ============ -->
+        <!-- ============ EVIDENCE NODES (root / observed via virtual evidence) ============ -->
 
         <!-- Antecedent Rainfall -->
-        <mxCell id="ant" value="&lt;b&gt;Antecedent Rainfall&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day accumulated IMERG (mm)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Dry (&amp;lt;10)&lt;br&gt;Normal (10–30)&lt;br&gt;Wet (30–60)&lt;br&gt;Very_Wet (60–100)&lt;br&gt;Saturated (&amp;gt;100)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight in base_risk: 0.30&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="100" width="200" height="220" as="geometry"/>
+        <mxCell id="ant" value="&lt;b&gt;Antecedent Rainfall&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day accumulated IMERG (mm)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Dry (&amp;lt;10)&lt;br&gt;Normal (10–30)&lt;br&gt;Wet (30–60)&lt;br&gt;Very_Wet (60–100)&lt;br&gt;Saturated (&amp;gt;100)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight: 0.30&lt;br&gt;σ_soft = 10 mm&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="200" height="230" as="geometry"/>
         </mxCell>
 
         <!-- Exceedance Probability -->
-        <mxCell id="exc" value="&lt;b&gt;Exceedance Probability&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;P_heavy = max over 7 durations&lt;br&gt;of P(accum ≥ 2yr RP)&lt;br&gt;ECMWF 51-member ensemble&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Very_Low (&amp;lt;0.20)&lt;br&gt;Low (0.20–0.40)&lt;br&gt;Medium (0.40–0.60)&lt;br&gt;High (0.60–0.80)&lt;br&gt;Very_High (&amp;gt;0.80)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight in base_risk: 0.55&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
-          <mxGeometry x="280" y="100" width="210" height="240" as="geometry"/>
+        <mxCell id="exc" value="&lt;b&gt;Exceedance Probability&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;P_heavy = max over 7 durations&lt;br&gt;of P(accum ≥ 2yr RP)&lt;br&gt;ECMWF 51-member ensemble&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Very_Low (&amp;lt;0.20)&lt;br&gt;Low (0.20–0.40)&lt;br&gt;Medium (0.40–0.60)&lt;br&gt;High (0.60–0.80)&lt;br&gt;Very_High (&amp;gt;0.80)&lt;br&gt;&lt;br&gt;&lt;i&gt;Weight: 0.55&lt;br&gt;σ_soft = 0.05&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="275" y="100" width="210" height="250" as="geometry"/>
         </mxCell>
 
         <!-- Spatial Coverage -->
-        <mxCell id="spa" value="&lt;b&gt;Spatial Coverage&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Fraction of boundary area&lt;br&gt;with P_heavy ≥ 0.5&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Localized (&amp;lt;0.30)&lt;br&gt;Moderate (0.30–0.60)&lt;br&gt;Widespread (&amp;gt;0.60)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: +0.25 / +0.50&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
-          <mxGeometry x="530" y="100" width="200" height="210" as="geometry"/>
+        <mxCell id="spa" value="&lt;b&gt;Spatial Coverage&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Fraction of boundary area&lt;br&gt;with P_heavy ≥ 0.5 OR ρ ≥ 1&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Localized (&amp;lt;0.30)&lt;br&gt;Moderate (0.30–0.60)&lt;br&gt;Widespread (&amp;gt;0.60)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: +0.25 / +0.50&lt;br&gt;σ_soft = 0.05&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="100" width="200" height="220" as="geometry"/>
         </mxCell>
 
         <!-- Rainfall Trend -->
-        <mxCell id="tre" value="&lt;b&gt;Rainfall Trend&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day regression slope&lt;br&gt;of daily IMERG boundary mean&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Decreasing (&amp;lt;−2 mm/day)&lt;br&gt;Stable (±2 mm/day)&lt;br&gt;Increasing (&amp;gt;+2 mm/day)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: −0.30 / +0.35&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
-          <mxGeometry x="770" y="100" width="200" height="210" as="geometry"/>
+        <mxCell id="tre" value="&lt;b&gt;Rainfall Trend&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;7-day regression slope β₁&lt;br&gt;of daily IMERG boundary mean&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Decreasing (&amp;lt;−2 mm/day)&lt;br&gt;Stable (±2 mm/day)&lt;br&gt;Increasing (&amp;gt;+2 mm/day)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: −0.30 / +0.35&lt;br&gt;σ_soft = 1.0 mm/day&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="755" y="100" width="200" height="220" as="geometry"/>
         </mxCell>
 
-        <!-- Forecast Agreement -->
-        <mxCell id="agr" value="&lt;b&gt;Forecast Agreement&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;|P_ecmwf − P_gefs|&lt;br&gt;(currently disabled:&lt;br&gt;ECMWF-only mode)&lt;br&gt;&lt;br&gt;States (3):&lt;br&gt;Low (&amp;gt;0.30)&lt;br&gt;Medium (0.15–0.30)&lt;br&gt;High (≤0.15)&lt;br&gt;&lt;br&gt;&lt;i&gt;Blends risk with uniform&lt;br&gt;Low: 50/50, Med: 80/20&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;dashed=1;dashPattern=8 4;" vertex="1" parent="1">
-          <mxGeometry x="1010" y="100" width="200" height="230" as="geometry"/>
+        <!-- Tail Risk (NEW — replaces forecast_agreement in v1) -->
+        <mxCell id="tail" value="&lt;b&gt;Tail Risk&lt;/b&gt; &lt;font color=&quot;#B85450&quot;&gt;(NEW v2)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;ρ = max_m accum_m / RP&lt;br&gt;per-boundary Q_0.95 over pixels&lt;br&gt;captures single-member hotspots&lt;br&gt;&lt;br&gt;States (4):&lt;br&gt;Nil (&amp;lt;0.5)&lt;br&gt;Low (0.5–1.0)&lt;br&gt;Moderate (1.0–2.0)&lt;br&gt;High (&amp;gt;2.0)&lt;br&gt;&lt;br&gt;&lt;i&gt;Modifier: +0.10/+0.35/+0.60&lt;br&gt;σ_soft = 0.15&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2.5;" vertex="1" parent="1">
+          <mxGeometry x="990" y="100" width="210" height="250" as="geometry"/>
         </mxCell>
+
+        <!-- ============ SOFT-EVIDENCE VIRTUAL-EVIDENCE CHANNELS (one per parent) ============ -->
+        <!-- Small observation node pinned beside each parent indicating X_obs ~ DiscreteTransition(X, I_K) -->
+
+        <mxCell id="ant_obs" value="&lt;b&gt;X&lt;sub&gt;a,obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= p(x;σ)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="360" width="80" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="exc_obs" value="&lt;b&gt;X&lt;sub&gt;e,obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= p(x;σ)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="380" width="80" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="spa_obs" value="&lt;b&gt;X&lt;sub&gt;s,obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= p(x;σ)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="580" y="350" width="80" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="tre_obs" value="&lt;b&gt;X&lt;sub&gt;t,obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= p(x;σ)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="815" y="350" width="80" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="tail_obs" value="&lt;b&gt;X&lt;sub&gt;ℓ,obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= p(x;σ)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1055" y="380" width="80" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- X -> X_obs edges (identity CPT) -->
+        <mxCell id="eobs_a" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.3;endArrow=open;endFill=0;dashed=0;" edge="1" source="ant" target="ant_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eobs_e" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.3;endArrow=open;endFill=0;" edge="1" source="exc" target="exc_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eobs_s" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.3;endArrow=open;endFill=0;" edge="1" source="spa" target="spa_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eobs_t" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.3;endArrow=open;endFill=0;" edge="1" source="tre" target="tre_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eobs_l" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.3;endArrow=open;endFill=0;" edge="1" source="tail" target="tail_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
         <!-- ============ HIDDEN NODE: RISK LEVEL ============ -->
 
-        <mxCell id="risk" value="&lt;b&gt;Risk Level&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Hidden (inferred)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Minimal&lt;br&gt;Low&lt;br&gt;Moderate&lt;br&gt;High&lt;br&gt;Extreme&lt;br&gt;&lt;br&gt;&lt;i&gt;CPT: 5 × 675 entries&lt;br&gt;(225 without agreement)&lt;br&gt;Expert rules + base_risk score&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="450" y="440" width="220" height="230" as="geometry"/>
+        <mxCell id="risk" value="&lt;b&gt;Risk Level&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Hidden (inferred)&lt;br&gt;&lt;br&gt;States (5):&lt;br&gt;Minimal&lt;br&gt;Low&lt;br&gt;Moderate&lt;br&gt;High&lt;br&gt;Extreme&lt;br&gt;&lt;br&gt;&lt;i&gt;CPT: T ∈ ℝ&lt;sup&gt;5×5×5×3×3×4&lt;/sup&gt;&lt;br&gt;= 4 500 entries&lt;br&gt;expert rules + base_risk score&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2.5;" vertex="1" parent="1">
+          <mxGeometry x="520" y="510" width="240" height="240" as="geometry"/>
         </mxCell>
 
-        <!-- ============ QUERY NODE: ACTION ============ -->
+        <!-- ============ DBN TEMPORAL COUPLING ============ -->
 
-        <mxCell id="act" value="&lt;b&gt;Recommended Action&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Query node&lt;br&gt;&lt;br&gt;States (4):&lt;br&gt;Monitor&lt;br&gt;Alert&lt;br&gt;Prepare&lt;br&gt;Act&lt;br&gt;&lt;br&gt;&lt;i&gt;CPT: 4 × 5 matrix&lt;br&gt;P(action | risk_level)&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="465" y="740" width="190" height="200" as="geometry"/>
+        <!-- Yesterday's posterior (R_{t-1}) -->
+        <mxCell id="dbn_prev" value="&lt;b&gt;R&lt;sub&gt;t−1&lt;/sub&gt; (yesterday)&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Yesterday's risk posterior r̂&lt;sub&gt;t−1&lt;/sub&gt;&lt;br&gt;blended with uniform prior:&lt;br&gt;&lt;br&gt;v&lt;sub&gt;t&lt;/sub&gt; = α·r̂&lt;sub&gt;t−1&lt;/sub&gt; + (1−α)·u&lt;sub&gt;5&lt;/sub&gt;&lt;br&gt;α = 0.6, lookback L = 7 days&lt;br&gt;&lt;br&gt;Injected as virtual evidence&lt;br&gt;on R&lt;sub&gt;obs&lt;/sub&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=11;shadow=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="120" y="540" width="220" height="170" as="geometry"/>
         </mxCell>
 
-        <!-- ============ EDGES ============ -->
+        <!-- R_obs (virtual-evidence sink for risk: also receives DBN temporal vector) -->
+        <mxCell id="risk_obs" value="&lt;b&gt;R&lt;sub&gt;obs&lt;/sub&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;= v&lt;sub&gt;t&lt;/sub&gt;&lt;br&gt;(identity CPT)&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;fontSize=10;shadow=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="600" width="100" height="60" as="geometry"/>
+        </mxCell>
 
-        <!-- ant → risk -->
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="ant" target="risk" parent="1">
+        <!-- R -> R_obs (identity CPT) -->
+        <mxCell id="e_ro" style="edgeStyle=none;rounded=0;html=1;strokeColor=#d79b00;strokeWidth=1.5;endArrow=open;endFill=0;" edge="1" source="risk" target="risk_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- DBN prev -> R_obs (as observed vector v_t) -->
+        <mxCell id="e_dbn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#B85450;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=1;dashPattern=6 3;" edge="1" source="dbn_prev" target="risk_obs" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_dbn_l" value="&lt;font color=&quot;#B85450&quot; style=&quot;font-size:10px&quot;&gt;&lt;b&gt;DBN temporal link&lt;/b&gt;&lt;br&gt;observes v&lt;sub&gt;t&lt;/sub&gt; on R&lt;sub&gt;obs&lt;/sub&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_dbn">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-20" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ============ CRMA OUTPUT (replaces Monitor/Alert/Prepare/Act in v1) ============ -->
+
+        <mxCell id="crma" value="&lt;b&gt;CRMA Output&lt;/b&gt; &lt;font color=&quot;#B85450&quot;&gt;(NEW v2)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Cost-loss trigger on posterior&lt;br&gt;γ = C/L (default 0.20)&lt;br&gt;&lt;br&gt;States (4, WMO traffic light):&lt;br&gt;&lt;font color=&quot;#d79b00&quot;&gt;■&lt;/font&gt; Monitor (Green)&lt;br&gt;&lt;font color=&quot;#e3c000&quot;&gt;■&lt;/font&gt; Evaluate (Yellow)&lt;br&gt;&lt;font color=&quot;#cc7a00&quot;&gt;■&lt;/font&gt; Assess (Orange)&lt;br&gt;&lt;font color=&quot;#cc0000&quot;&gt;■&lt;/font&gt; Actionable_Risk (Red)&lt;br&gt;&lt;br&gt;&lt;i&gt;Deterministic post-BN rule&lt;br&gt;(not a BN node — no CPT fiction)&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=12;align=center;verticalAlign=top;spacingTop=5;fontSize=12;shadow=1;strokeWidth=2.5;" vertex="1" parent="1">
+          <mxGeometry x="535" y="820" width="210" height="240" as="geometry"/>
+        </mxCell>
+
+        <!-- Risk -> CRMA -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#82b366;endArrow=blockThin;endFill=1;" edge="1" source="risk" target="crma" parent="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
+        <mxCell id="e6l" value="&lt;font style=&quot;font-size:10px&quot;&gt;cost-loss rule&lt;br&gt;on r̂ = (p_Min,…,p_Ext)&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e6">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="55" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ============ EVIDENCE -> RISK EDGES ============ -->
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="ant" target="risk" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e1l" value="&lt;font style=&quot;font-size:10px&quot;&gt;w=0.30&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e1">
           <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="-20" y="0" as="offset"/></mxGeometry>
         </mxCell>
 
-        <!-- exc → risk -->
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="exc" target="risk" parent="1">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;strokeWidth=3.5;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="exc" target="risk" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e2l" value="&lt;font style=&quot;font-size:10px&quot;&gt;&lt;b&gt;w=0.55&lt;/b&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e2">
           <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="-15" y="0" as="offset"/></mxGeometry>
         </mxCell>
 
-        <!-- spa → risk -->
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="spa" target="risk" parent="1">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.55;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="spa" target="risk" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3l" value="&lt;font style=&quot;font-size:10px&quot;&gt;+0.25/+0.50&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e3">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="30" y="0" as="offset"/></mxGeometry>
         </mxCell>
 
-        <!-- tre → risk -->
-        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.9;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="tre" target="risk" parent="1">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="tre" target="risk" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4l" value="&lt;font style=&quot;font-size:10px&quot;&gt;−0.30/+0.35&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e4">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="30" y="0" as="offset"/></mxGeometry>
         </mxCell>
 
-        <!-- agr → risk (dashed) -->
-        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#9673a6;endArrow=blockThin;endFill=1;dashed=1;dashPattern=8 4;" edge="1" source="agr" target="risk" parent="1">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="e5l" value="&lt;font color=&quot;#9673a6&quot; style=&quot;font-size:10px&quot;&gt;&lt;i&gt;optional&lt;br&gt;(--no-agreement)&lt;/i&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e5">
-          <mxGeometry x="0.3" relative="1" as="geometry"><mxPoint x="20" y="0" as="offset"/></mxGeometry>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.95;entryY=0.15;entryDx=0;entryDy=0;strokeWidth=2.5;strokeColor=#6c8ebf;endArrow=blockThin;endFill=1;" edge="1" source="tail" target="risk" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5l" value="&lt;font style=&quot;font-size:10px&quot;&gt;&lt;b&gt;+0.10/+0.35/+0.60&lt;/b&gt;&lt;br&gt;tail signal&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e5">
+          <mxGeometry x="0.2" relative="1" as="geometry"><mxPoint x="30" y="0" as="offset"/></mxGeometry>
         </mxCell>
 
-        <!-- risk → action -->
-        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#82b366;endArrow=blockThin;endFill=1;" edge="1" source="risk" target="act" parent="1">
-          <mxGeometry relative="1" as="geometry"/>
+        <!-- ============ PER-MEMBER STORYLINE SIDEBAR ============ -->
+
+        <mxCell id="story_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8e8ff;strokeColor=#9673a6;arcSize=8;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="480" width="430" height="260" as="geometry"/>
         </mxCell>
-        <mxCell id="e6l" value="&lt;font style=&quot;font-size:10px&quot;&gt;P(action | risk)&lt;br&gt;4×5 CPT&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e6">
-          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="45" y="0" as="offset"/></mxGeometry>
+        <mxCell id="story_title" value="&lt;b&gt;Per-Member Storyline Evaluation&lt;/b&gt; &lt;font color=&quot;#B85450&quot;&gt;(NEW v2)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="490" width="380" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="story_text" value="&lt;font style=&quot;font-size:11px&quot;&gt;For each boundary × date, the BN runs &lt;b&gt;51 times&lt;/b&gt; —&lt;br&gt;once per ECMWF ensemble member — with&lt;br&gt;member-specific exceedance, spatial, and tail-risk&lt;br&gt;evidence (antecedent &amp; trend shared from IMERG).&lt;br&gt;&lt;br&gt;Storylines selected by rank of p_High + p_Extreme:&lt;br&gt;  &lt;b&gt;m_worst&lt;/b&gt;  = arg max  (rank 1/51 ≈ 2%)&lt;br&gt;  &lt;b&gt;m_median&lt;/b&gt; = median rank&lt;br&gt;  &lt;b&gt;m_best&lt;/b&gt;  = arg min&lt;br&gt;&lt;br&gt;Answers: &lt;i&gt;&quot;what is the worst-case plausible&lt;br&gt;future, and how likely is it?&quot;&lt;/i&gt;&lt;br&gt;Ensemble frequency P(world ≥ m*) = |{m: p_HE ≥ p_HE^m*}|/51&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="518" width="410" height="220" as="geometry"/>
         </mxCell>
 
         <!-- ============ LEGEND ============ -->
 
         <mxCell id="leg_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="40" y="740" width="340" height="200" as="geometry"/>
+          <mxGeometry x="40" y="820" width="430" height="230" as="geometry"/>
         </mxCell>
         <mxCell id="leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="55" y="748" width="60" height="25" as="geometry"/>
+          <mxGeometry x="55" y="828" width="60" height="25" as="geometry"/>
         </mxCell>
         <mxCell id="leg1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" vertex="1" parent="1">
-          <mxGeometry x="55" y="780" width="20" height="15" as="geometry"/>
+          <mxGeometry x="55" y="860" width="20" height="15" as="geometry"/>
         </mxCell>
-        <mxCell id="leg1t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Evidence node (observed / clamped to data)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="82" y="776" width="260" height="25" as="geometry"/>
+        <mxCell id="leg1t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Evidence node X_k (uniform prior Cat(u_K))&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="856" width="300" height="25" as="geometry"/>
         </mxCell>
-        <mxCell id="leg2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;arcSize=20;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="55" y="805" width="20" height="15" as="geometry"/>
+        <mxCell id="leg2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="55" y="885" width="20" height="15" as="geometry"/>
         </mxCell>
-        <mxCell id="leg2t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Optional evidence (disabled in ECMWF-only mode)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="82" y="801" width="290" height="25" as="geometry"/>
+        <mxCell id="leg2t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Virtual-evidence channel X_obs ~ DT(X, I_K), observed p(x;σ)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="881" width="370" height="25" as="geometry"/>
         </mxCell>
-        <mxCell id="leg3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="55" y="830" width="20" height="15" as="geometry"/>
+        <mxCell id="leg3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="55" y="910" width="20" height="15" as="geometry"/>
         </mxCell>
-        <mxCell id="leg3t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Hidden node (inferred via CPT lookup / message passing)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="82" y="826" width="310" height="25" as="geometry"/>
+        <mxCell id="leg3t" value="&lt;font style=&quot;font-size:11px&quot;&gt;DBN temporal input: yesterday's posterior r̂_{t−1}&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="906" width="350" height="25" as="geometry"/>
         </mxCell>
-        <mxCell id="leg4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="55" y="855" width="20" height="15" as="geometry"/>
+        <mxCell id="leg4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="55" y="935" width="20" height="15" as="geometry"/>
         </mxCell>
-        <mxCell id="leg4t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Query node (actionable output)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="82" y="851" width="190" height="25" as="geometry"/>
+        <mxCell id="leg4t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Hidden node R (risk level, inferred via MP / tensor contraction)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="931" width="370" height="25" as="geometry"/>
         </mxCell>
-        <mxCell id="leg5t" value="&lt;font style=&quot;font-size:11px&quot;&gt;Edge thickness ∝ weight in base_risk score&lt;br&gt;Thickest edge = exceedance_prob (w=0.55)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="55" y="878" width="260" height="45" as="geometry"/>
+        <mxCell id="leg5" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="55" y="960" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg5t" value="&lt;font style=&quot;font-size:11px&quot;&gt;CRMA output (deterministic cost-loss rule on posterior — not a BN node)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="82" y="956" width="400" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_edge_note" value="&lt;font style=&quot;font-size:10px&quot;&gt;Blue solid: parent → risk (edge thickness ∝ weight in base_risk score)&lt;br&gt;Orange solid: identity CPT observation channel (soft evidence)&lt;br&gt;Red dashed: DBN temporal link (yesterday's blended posterior)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="55" y="990" width="420" height="55" as="geometry"/>
         </mxCell>
 
-        <!-- ============ ACTION CPT TABLE (annotation) ============ -->
+        <!-- ============ CRMA COST-LOSS THRESHOLD TABLE ============ -->
 
         <mxCell id="cpt_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="740" y="500" width="460" height="160" as="geometry"/>
+          <mxGeometry x="800" y="820" width="430" height="240" as="geometry"/>
         </mxCell>
-        <mxCell id="cpt_title" value="&lt;b&gt;Action CPT — P(action | risk_level)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="755" y="508" width="220" height="20" as="geometry"/>
+        <mxCell id="cpt_title" value="&lt;b&gt;CRMA Cost-Loss Triggers — replaces v1 Action CPT&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="815" y="828" width="400" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="cpt_table" value="&lt;font style=&quot;font-size:11px&quot; face=&quot;monospace&quot;&gt;Risk →    Minimal  Low   Mod   High  Extr&lt;br&gt;────────────────────────────────────────&lt;br&gt;Monitor    0.95   0.15  0.00  0.00  0.00&lt;br&gt;Alert      0.05   0.80  0.20  0.05  0.00&lt;br&gt;Prepare    0.00   0.05  0.75  0.25  0.05&lt;br&gt;Act        0.00   0.00  0.05  0.70  0.95&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="755" y="532" width="430" height="120" as="geometry"/>
+        <mxCell id="cpt_table" value="&lt;font style=&quot;font-size:11px&quot; face=&quot;monospace&quot;&gt;Rule: act when cumulative posterior mass ≥ θ&lt;br&gt;─────────────────────────────────────────&lt;br&gt;&lt;b&gt;Actionable_Risk&lt;/b&gt;  if p_High+p_Ext  ≥ θ₁ = γ&lt;br&gt;&lt;b&gt;Assess&lt;/b&gt;           if p_Mod+p_H+p_E ≥ θ₂ = max(2γ, 0.40)&lt;br&gt;&lt;b&gt;Evaluate&lt;/b&gt;         if p_Low+…+p_E   ≥ θ₃ = max(3γ, 0.30)&lt;br&gt;&lt;b&gt;Monitor&lt;/b&gt;          otherwise&lt;br&gt;─────────────────────────────────────────&lt;br&gt;γ = C/L (cost-loss ratio), default 0.20&lt;br&gt;γ ≈ 0.10 for anticipatory cash transfers&lt;br&gt;γ ≈ 0.20 for pre-positioned stockpiles&lt;br&gt;&lt;br&gt;&lt;i&gt;Grounded in Murphy (1977) and Lopez et al. (2020) —&lt;br&gt;rational trigger = P(event) ≥ C/L.&lt;/i&gt;&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="815" y="852" width="410" height="200" as="geometry"/>
         </mxCell>
 
         <!-- ============ INFERENCE NOTE ============ -->
 
         <mxCell id="inf_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="740" y="690" width="460" height="110" as="geometry"/>
+          <mxGeometry x="1240" y="760" width="430" height="300" as="geometry"/>
         </mxCell>
-        <mxCell id="inf_title" value="&lt;b&gt;Inference (3 equivalent methods)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="755" y="698" width="210" height="20" as="geometry"/>
+        <mxCell id="inf_title" value="&lt;b&gt;Inference (2 equivalent methods)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="768" width="320" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="inf_text" value="&lt;font style=&quot;font-size:11px&quot;&gt;① &lt;b&gt;Direct matrix&lt;/b&gt; (Julia infer_direct) — CPT column lookup + matmul, ~50 ns/boundary&lt;br&gt;② &lt;b&gt;Message passing&lt;/b&gt; (Julia RxInfer.jl) — factor graph BP, supports learning/streaming&lt;br&gt;③ &lt;b&gt;Variable elimination&lt;/b&gt; (Python pgmpy) — exact factor marginalization, ~10 ms/boundary&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="755" y="722" width="500" height="65" as="geometry"/>
+        <mxCell id="inf_text" value="&lt;font style=&quot;font-size:11px&quot;&gt;① &lt;b&gt;RxInfer.jl message passing&lt;/b&gt; (primary)&lt;br&gt;   reactive sum-product on factor graph&lt;br&gt;   (Kschischang 2001; Bagaev 2023)&lt;br&gt;   ~30 s JIT compile, ~1 s / boundary after&lt;br&gt;   natively supports virtual evidence + DBN&lt;br&gt;&lt;br&gt;② &lt;b&gt;Direct tensor contraction&lt;/b&gt; (bulk/storyline)&lt;br&gt;   P(R=r) ∝ Σ T_{r,a,e,s,t,ℓ} · p_a·p_e·p_s·p_t·p_ℓ&lt;br&gt;   ~4 500 flops / boundary&lt;br&gt;   115 770 per-member evals in ~5 s&lt;br&gt;   verified against RxInfer to |Δ| &amp;lt; 1.5e−9&lt;br&gt;&lt;br&gt;&lt;i&gt;pgmpy variable elimination (v1) is retired —&lt;br&gt;lacked native virtual-evidence + streaming.&lt;/i&gt;&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="790" width="410" height="260" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ V1 → V2 CHANGES CALLOUT ============ -->
+
+        <mxCell id="changes_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=8;strokeWidth=1.5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="100" width="430" height="360" as="geometry"/>
+        </mxCell>
+        <mxCell id="changes_title" value="&lt;b&gt;v1 → v2 Changes (knowledge-gap upgrades)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="110" width="400" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="changes_text" value="&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;(a) Tail-risk parent added&lt;/b&gt; — Q_0.95 of ens_max/RP captures single-member pixel hotspots that ensemble-mean exceedance smooths away (forecast_agreement removed; ECMWF-only operation).&lt;br&gt;&lt;br&gt;&lt;b&gt;(b) Soft evidence on all parents&lt;/b&gt; — Gaussian soft-binning (Eq. p_k = Φ((c_k−x)/σ) − Φ((c_{k−1}−x)/σ)) turns hard classification into a probability vector, injected as virtual evidence through an identity-CPT observation node (Pearl 1988; Chan &amp; Darwiche 2005). Eliminates bin-edge whiplash.&lt;br&gt;&lt;br&gt;&lt;b&gt;(c) Dynamic BN temporal coupling&lt;/b&gt; — R_{t−1} blended with uniform prior (α=0.6, L=7) observed on R_obs. Suppresses 52% false Actionable_Risk spikes; smooth ramp-up/ramp-down (Murphy 2002).&lt;br&gt;&lt;br&gt;&lt;b&gt;(d) Per-member storylines&lt;/b&gt; — 51 parallel BN runs per boundary-day yield worst/median/best members and ensemble-frequency probabilities (Shepherd 2016, 2019).&lt;br&gt;&lt;br&gt;&lt;b&gt;(e) Cost-loss CRMA output&lt;/b&gt; — action node removed from BN; 4-state WMO traffic light applied to posterior via C/L trigger (Murphy 1977; Lopez 2020).&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1255" y="136" width="410" height="318" as="geometry"/>
         </mxCell>
 
       </root>
