@@ -272,11 +272,11 @@ the current season + the next two — instead of once per (boundary).
 
 | Slot | v1 (single snapshot) | v2 (seasonal) |
 |---|---|---|
-| **P1 `current_spi3`** | latest single-month ERA5 SPI3 value at boundary | ERA5 SPI3 across the **last 6 months** at boundary, **bucketed by season** (mean SPI3 per season in the lookback). The "value" passed to the categoriser is the SPI3 of the season *immediately preceding* the target — i.e. how dry are we *going into* the target window. |
-| **P2 `deficit_prob`** | mean over leads of `P(SPI ≤ −1)` across all 51 members | for the **target season only**, mean of `P(SPI ≤ RP_threshold)` over the leads pointing to that season's months, using **members 0..24** (first 25, see below). Three leads per season per init (table above). |
+| **P1 `current_spi3`** | latest single-month ERA5 SPI3 value at boundary | **unchanged** — latest single-month ERA5 SPI3. (No seasonal bucketing: a single-month target has at most one "current" state, and the improving / worsening trajectory of the last 6 months is already captured by P4. Bucketing obs by season would duplicate P4's signal without adding new information.) |
+| **P2 `deficit_prob`** | mean over leads of `P(SPI ≤ −1)` across all 51 members | `P(SPI ≤ RP_threshold)` at the **single lead index pointing to the target season's anchor month** (May for MAM, Aug for JJA, Nov for OND, Feb for DJF — SPI-3 is a 3-month index so the season's value is anchored at the last month of the season), using **members 0..24** (first 25, see below). One lead per (init_month, target_season) per the table above. |
 | **P3 `spatial_coverage`** | unchanged (max of P_deficit ≥ 0.5 mask & hotspot fraction) | unchanged in form; same metric computed on the season-restricted forecast slice. |
-| **P4 `spi3_trend`** | slope of last 6 months' ERA5 SPI3 (slope SPI/month) | **same metric** but explicitly tied to the obs window described in P1; documented as "6-month obs slope". |
-| **P5 `tail_risk`** | p5 of ens-min SPI across all leads × 51 members | p5 of ens-min SPI across the **target-season's leads × first 25 members**. |
+| **P4 `spi3_trend`** | slope of last 6 months' ERA5 SPI3 (slope SPI/month) | **unchanged**. The 6-month obs slope is the antecedent-trajectory signal — improving (positive slope) means the boundary is climbing out of drought, deteriorating (negative slope) means it's sinking deeper. This is the only obs-side parent that needs the 6-month window. |
+| **P5 `tail_risk`** | p5 of ens-min SPI across all leads × 51 members | p5 of ens-min SPI at the **target-season's anchor lead × first 25 members**. |
 
 Forecast-agreement (P6, optional) stays the same.
 
@@ -343,11 +343,10 @@ storyline volume.
 ```
 id, name, country, target_date, init_month,
 target_season,            # MAM / JJA / OND / DJF
-lead_indices_used,        # e.g. "2,3,4" (the 3 leads for this season from this init)
+lead_index_used,          # 1-based lead pointing at the season's anchor month
 
-# P1 evidence (per-season obs)
-current_spi3_target_season,        # SPI3 of the season immediately before target
-season_means_obs,                  # JSON: {"OND_2025": -0.4, "DJF_2025-26": -0.8, ...}
+# P1 evidence (single-month obs — same as v1)
+current_spi3,                      # latest available ERA5 SPI3 ≤ target month
 current_spi3_category,             # 5-state hard label
 
 # P2 evidence (per-season forecast)
@@ -371,10 +370,12 @@ ens_mean_target_spi, ens_min_target_spi, ens_max_target_spi,
 # Optional soft-evidence cols (same prefixes as v1: cur, def, spa, trn, tail)
 ```
 
-`drought_bn_ibf_v1.jl` reads this schema as-is — only `current_spi3` →
-`current_spi3_target_season` is renamed in the BoundaryInput
-constructor, and the new `target_season` / `init_month` columns are
-passed through to the output. **The BN engine is unchanged.**
+`drought_bn_ibf_v1.jl` reads this schema as-is — `current_spi3`,
+`spi3_trend`, `forecast_deficit_prob`, `spatial_coverage`,
+`forecast_agreement`, and `ens_min_spi` (now from members 0..24) are
+all already present in the v1 reader. The new `target_season` /
+`init_month` columns are passed through to the output. **The BN
+engine is unchanged.**
 
 ## Implementation plan
 
@@ -389,12 +390,11 @@ passed through to the output. **The BN engine is unchanged.**
    - tail: `fcst.isel(member=slice(0, 25)).min(dim=("member", "lead"))`
    - new output columns listed above
 2. **`drought_bn_ibf_v1.jl`**:
-   - rename `current_spi3` → `current_spi3_target_season` in the CSV
-     reader (1-line change)
    - emit `target_season` + `init_month` in the result CSV (5-line
      change in `run_csv`)
-   - **no changes to the BN engine, the @model functions, the CPT, or
-     the CRMA decision rule.**
+   - **no changes to the BN engine, the @model functions, the CPT, the
+     CRMA decision rule, or the column names — `ens_min_spi` is the
+     same column, the prep just computes it from members 0..24 only.**
 3. **`drought_bn_ibf_v1.py`** (reference): mirror the column-name
    change; its CPT divergence with the Julia version is unchanged.
 4. **README** + this doc: add a "v2 / seasonal" section above the
@@ -420,10 +420,9 @@ values are computed; the inference layer is untouched.
 
 ## Open questions for review
 
-1. **Trend window vs target season**: should the slope come from the
-   last 6 obs months (current v1) or only from the season(s) leading
-   into the target (e.g. MAM target → use only DJF slope)? The latter
-   tightens the seasonal interpretation but may give a noisier slope.
+1. **Trend window vs target season**: settled — keep the last 6 obs
+   months for the slope (current v1). It already encodes improving /
+   worsening over the antecedent window without seasonal aliasing.
 2. **DBN chaining**: v1 chains month-to-month. v2's natural chain is
    season-to-season for a fixed target — i.e. the MAM-from-Dec
    posterior priors the MAM-from-Jan run. Lookback would be the
@@ -445,3 +444,45 @@ values are computed; the inference layer is untouched.
 
 A first cut of v2 prep + the 6-line BN driver patch is a ~1-day task
 and can land on a `drought-v2-seasonal` branch alongside this doc.
+
+## Status (2026-04-28)
+
+- **v2 CLI is in place** in `drought_data_prep.py` —
+  `--init-month`, `--target-season`, `--ensemble-size 25`,
+  `--rp-prefer fitted`, plus the season → lead-index lookup
+  (`lead_for_season()`), member slicing
+  (`fcst.isel(member=slice(0, ensemble_size))`), per-pixel RP
+  threshold from `era5_ecmwf_rp_icechunk`, and the v1↔v2 mode
+  dispatch in `main()`. Output schema has the new `init_month`,
+  `target_season`, `lead_index_used`, `deficit_threshold_source`,
+  `ensemble_size` columns inserted ahead of the v1 evidence block.
+  `--help` shows everything.
+- **End-to-end runtime is OOM-bound on the 8 GB dev VM** for the
+  full 227-boundary EA grid: every prep run dies with SIGKILL
+  (exit 137) somewhere between the obs zonal-reduce loop and the
+  forecast load. `free -h` shows 4-5 GB free immediately before
+  the kill, so this is allocation-spike rather than steady-state —
+  most likely the `(fcst_rg <= rp_thresh).any(dim=["member", "lead"])`
+  expression briefly materialises a ~1 GB bool stack on top of the
+  already-loaded forecast slab, plus the regionmask / xarray
+  broadcast machinery. Earlier v1 runs (before the v2 edits) did
+  finish on the same VM, so the regression is in the v2 path's
+  per-pixel thresholding, not in the seasonal slicing per se.
+- **Mitigations to apply next**:
+  1. Stream `(fcst_rg <= rp_thresh).any(...)` lead-by-lead with a
+     small dask scheduler (single-threaded), exactly the pattern we
+     used for the SPI3 + regrid step. Avoid the simultaneous bool
+     materialisation across all 6 leads × 51 members.
+  2. Cast the forecast slab to `float32` before any arithmetic
+     (the icechunk read may default to `float64` on some xarray
+     paths, doubling memory).
+  3. Run on a slightly larger VM (16 GB) for the operational
+     pipeline; the pencil-zarr rechunk already uses Coiled in
+     us-west-1 and the prep step would fit there too if local memory
+     stays a constraint.
+- **Julia BN engine is unchanged** — `drought_bn_ibf_v1.jl` reads
+  the v2 schema as-is once the prep produces a CSV.
+
+Until (1)/(2) are applied, the v1 prep path remains the only
+end-to-end-tested route. v2 is committed and ready to debug on a
+larger machine.

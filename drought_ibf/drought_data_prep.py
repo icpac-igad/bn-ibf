@@ -85,6 +85,29 @@ ISO_TO_COUNTRY = {
     "SDN": "Sudan", "TZA": "Tanzania", "UGA": "Uganda",
 }
 
+# ─── Seasonal mapping (v2) ───────────────────────────────────────────────────
+# East-Africa SPI-3 seasons. SPI-3 at month X is the 3-month mean ending at
+# X, so the season's "anchor" month is the *last* month of the season.
+# Source: drought_crma/itt-seasonal-docs.rst (lines 72-112).
+
+SEASON_ANCHOR_MONTH = {
+    "MAM": 5,   # Mar-Apr-May, anchor = May
+    "JJA": 8,   # Jun-Jul-Aug, anchor = Aug
+    "OND": 11,  # Sep-Oct-Nov, anchor = Nov
+    "DJF": 2,   # Dec-Jan-Feb, anchor = Feb (next year)
+}
+
+# Default valid (init_month, target_season) pairs. SEAS5 has 6 leads (1..6),
+# so a season is reachable iff the anchor is 1..6 months ahead. The doc's
+# operational table uses leads 2/3/4 only (drops lead 5 and lead 6 as too
+# uncertain); we accept any lead in 1..6 with a warning when outside 2..4.
+SEASON_INIT_LEAD = {
+    "MAM": {12: 5, 1: 4, 2: 3},          # doc table
+    "JJA": {3: 5, 4: 4, 5: 3},
+    "OND": {6: 5, 7: 4, 8: 3},
+    "DJF": {9: 5, 10: 4, 11: 3},
+}
+
 # Drought-specific SPI threshold ("forecast deficit" = forecast SPI ≤ this).
 # -1.0 = McKee moderate drought; tunable via --deficit-spi.
 DEFAULT_DEFICIT_SPI = -1.0
@@ -159,6 +182,25 @@ def add_soft_columns(df: pd.DataFrame, cur_spi: np.ndarray, def_p: np.ndarray,
         probs = np.vstack([soft_bin(float(v), node) for v in vals])
         for i in range(k):
             df[f"{node}_p{i+1}"] = np.round(probs[:, i], 4)
+
+
+def lead_for_season(init_month: int, target_season: str) -> int:
+    """Return the 1-based SEAS5 lead index pointing at the season's anchor
+    month from the given init month, or raise if not reachable in 1..6 leads.
+    """
+    if target_season not in SEASON_ANCHOR_MONTH:
+        raise ValueError(f"Unknown season: {target_season} "
+                         f"(expected {list(SEASON_ANCHOR_MONTH)})")
+    anchor = SEASON_ANCHOR_MONTH[target_season]
+    lead = ((anchor - init_month) % 12) or 12
+    if not 1 <= lead <= 6:
+        raise SystemExit(
+            f"[prep] {target_season} from init month {init_month} requires "
+            f"lead {lead}, but SEAS5 only has leads 1..6. Pick another init.")
+    if lead == 6:
+        print(f"[prep] WARNING: {target_season} from init {init_month} uses "
+              f"lead 6 (max horizon, large forecast uncertainty)")
+    return lead
 
 
 def categorize_current_spi(spi: float) -> str:
@@ -439,8 +481,20 @@ def compute_per_member_evidence(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", required=True,
-                    help="Target month D (YYYY-MM-01 or YYYY-MM)")
+    ap.add_argument("--date", required=False, default=None,
+                    help="Target month D (YYYY-MM-01 or YYYY-MM) — v1 single-month "
+                         "snapshot mode. Mutually exclusive with --init-month.")
+    ap.add_argument("--init-month", required=False, default=None,
+                    help="v2 seasonal mode: init month for the SEAS5 forecast "
+                         "(YYYY-MM). Use with --target-season.")
+    ap.add_argument("--target-season", choices=["MAM", "JJA", "OND", "DJF"],
+                    default=None,
+                    help="v2 seasonal mode: SPI-3 target season anchored at the "
+                         "season's last month (May/Aug/Nov/Feb). Use with --init-month.")
+    ap.add_argument("--ensemble-size", type=int, default=51,
+                    help="Number of ensemble members to use for P2 (deficit_prob) "
+                         "and P5 (tail_risk). Default 51 (all). v2 uses 25 "
+                         "(first 25 = members with full 1981-now hindcast).")
     ap.add_argument("--rp-years", type=int, default=5,
                     help="Return period years (default 5; choices: 3,5,10,20,50)")
     ap.add_argument("--spi-period", default="SPI3",
@@ -467,11 +521,35 @@ def main() -> None:
                     help="Per-member sidecar CSV path (one row per boundary × member)")
     args = ap.parse_args()
 
-    # Accept "YYYY-MM" or "YYYY-MM-DD"; clamp to first of month.
-    D = pd.Timestamp(args.date)
-    D = D.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    print(f"[prep] D={D.date()}  RP={args.rp_years}yr  spi_period={args.spi_period}  "
-          f"deficit_spi={args.deficit_spi}  trend_band=±{args.trend_band}/month")
+    # ── v1 vs v2 mode dispatch ──────────────────────────────────────────────
+    seasonal_mode = args.init_month is not None or args.target_season is not None
+    if seasonal_mode:
+        if args.init_month is None or args.target_season is None:
+            raise SystemExit("[prep] v2 seasonal mode requires both "
+                             "--init-month YYYY-MM and --target-season MAM|JJA|OND|DJF")
+        if args.date is not None:
+            raise SystemExit("[prep] --date is v1-only; use --init-month + --target-season for v2")
+        I = pd.Timestamp(args.init_month).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        target_season = args.target_season
+        target_lead = lead_for_season(I.month, target_season)
+        anchor_month = SEASON_ANCHOR_MONTH[target_season]
+        # The season's anchor calendar month relative to the init year.
+        anchor_year = I.year + (1 if anchor_month <= I.month else 0) if target_season == "DJF" else I.year + (1 if anchor_month < I.month else 0)
+        D = pd.Timestamp(year=anchor_year, month=anchor_month, day=1)
+        print(f"[prep] v2 seasonal: init={I.date()}  target_season={target_season}  "
+              f"anchor_month={D.date()}  lead={target_lead}  "
+              f"members={args.ensemble_size}  RP={args.rp_years}yr  "
+              f"trend_band=±{args.trend_band}/month")
+    else:
+        if args.date is None:
+            raise SystemExit("[prep] either --date (v1) or --init-month+--target-season (v2)")
+        D = pd.Timestamp(args.date).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        I = D
+        target_season = None
+        target_lead = None
+        print(f"[prep] v1 single-month: D={D.date()}  RP={args.rp_years}yr  "
+              f"spi_period={args.spi_period}  deficit_spi={args.deficit_spi}  "
+              f"trend_band=±{args.trend_band}/month")
 
     adm1 = gpd.read_file(args.adm1).reset_index(drop=True)
     n_adm = len(adm1)
@@ -491,12 +569,15 @@ def main() -> None:
     obs_spi3 = load_obs_spi3_window(obs, D, args.trend_months)
     if args.clip_spi > 0:
         obs_spi3 = obs_spi3.clip(-args.clip_spi, args.clip_spi)
-        print(f"[prep] clipped obs SPI to ±{args.clip_spi}")
+        print(f"[prep] clipped obs SPI to ±{args.clip_spi}", flush=True)
     cur_spi3_grid = obs_spi3.isel(time=-1)  # most recent month
 
+    print("[prep] building obs mask ...", flush=True)
     obs_mask = build_mask(adm1, obs_spi3.lat, obs_spi3.lon)
+    print(f"[prep] obs mask built: {obs_mask.shape}, {int((obs_mask >= 0).sum())} masked pixels", flush=True)
     cur_spi_adm = zonal_reduce(cur_spi3_grid, obs_mask, obs_spi3.lat, n_adm)
     cur_spi_adm = fill_small_boundaries(cur_spi_adm, cur_spi3_grid, adm1)
+    print("[prep] cur_spi_adm computed", flush=True)
 
     # Slope of monthly SPI3 over the trend window
     n_t = obs_spi3.sizes["time"]
@@ -513,11 +594,20 @@ def main() -> None:
     cur_cat = np.array([categorize_current_spi(s) for s in cur_spi_adm])
 
     # ── Forecast: lead × member × lat × lon for the chosen init ─────────────
-    fcst = load_forecast_spi3(forecast, D)
+    # v1: init = target month D
+    # v2: init = I (--init-month); slice will then pick the season's anchor lead.
+    fcst = load_forecast_spi3(forecast, I)
     if args.clip_spi > 0:
         fcst = fcst.clip(-args.clip_spi, args.clip_spi)
     print(f"[prep] forecast dims: {dict(fcst.sizes)} "
           f"{'(clipped to ±' + str(args.clip_spi) + ')' if args.clip_spi > 0 else ''}")
+
+    # v2: restrict to first N ensemble members (default 25 = full 1981-now
+    # hindcast block; members 25-50 only exist from 2017 onwards).
+    if args.ensemble_size < fcst.sizes["member"]:
+        fcst = fcst.isel(member=slice(0, args.ensemble_size))
+        print(f"[prep] forecast restricted to first {args.ensemble_size} members "
+              f"(calibration coverage: 1981-now)")
 
     # Regrid forecast (10 km, 351×321) to obs/RP grid (~25 km, 161×133)
     rp_thresh = load_rp_thresholds(rp, rp_year=args.rp_years,
@@ -527,28 +617,41 @@ def main() -> None:
     print(f"[prep] forecast regridded to RP grid: {dict(fcst_rg.sizes)}")
 
     # ── Forecast deficit metrics ─────────────────────────────────────────────
-    # Per-pixel deficit prob: P(any-lead-and-member SPI ≤ deficit_spi) — but
-    # for direct flood parity we use ensemble-fraction at the RP level too.
-    deficit_lead = (fcst_rg <= args.deficit_spi)                # (lead, member, lat, lon)
-    deficit_prob_per_lead = deficit_lead.mean(dim="member")     # (lead, lat, lon)
-    p_deficit  = deficit_prob_per_lead.max(dim="lead")          # (lat, lon) max P over leads
-    # lead-1 (next month)
-    if 1 in fcst_rg.lead.values:
-        p_def_l1 = deficit_prob_per_lead.sel(lead=1)
+    # v2: deficit threshold = per-pixel SPI return-period threshold from
+    # era5_ecmwf_rp_icechunk (negative SPI value, e.g. ~-0.84 for 5-yr).
+    # v1: scalar -1.0 (--deficit-spi).
+    if seasonal_mode:
+        # Slice to the single anchor lead for the target season.
+        fc_target = fcst_rg.sel(lead=target_lead)               # (member, lat, lon)
+        deficit_thresh = rp_thresh                              # (lat, lon)
+        deficit_lead = (fc_target <= deficit_thresh)            # (member, lat, lon)
+        p_def_l1 = deficit_lead.mean(dim="member")              # (lat, lon)
+        p_deficit = p_def_l1                                    # single lead → same value
+        ens_mean_l1 = fc_target.mean(dim="member")
+        ens_min_l1  = fc_target.min(dim="member")
+        ens_max_l1  = fc_target.max(dim="member")
+        ens_min_anylead = ens_min_l1                            # single lead → same
+        deficit_threshold_label = (f"era5_ecmwf_rp_icechunk:{args.rp_years}yr "
+                                   f"{args.rp_prefer}")
+        crosses_rp = (fc_target <= rp_thresh).astype("float32") # (member, lat, lon)
+        crosses_rp_any = crosses_rp.any(dim="member").astype("float32")
     else:
-        p_def_l1 = deficit_prob_per_lead.isel(lead=0)
-
-    # Ensemble extremes at lead 1 (in SPI units)
-    if 1 in fcst_rg.lead.values:
-        l1 = fcst_rg.sel(lead=1)
-    else:
-        l1 = fcst_rg.isel(lead=0)
-    ens_mean_l1 = l1.mean(dim="member")
-    ens_min_l1  = l1.min(dim="member")
-    ens_max_l1  = l1.max(dim="member")
-
-    # Worst-case ens-min across leads (per pixel)  → tail-risk grid
-    ens_min_anylead = fcst_rg.min(dim="member").min(dim="lead")  # (lat, lon)
+        # v1: scalar deficit_spi, max over leads.
+        deficit_lead = (fcst_rg <= args.deficit_spi)            # (lead, member, lat, lon)
+        deficit_prob_per_lead = deficit_lead.mean(dim="member") # (lead, lat, lon)
+        p_deficit = deficit_prob_per_lead.max(dim="lead")
+        if 1 in fcst_rg.lead.values:
+            p_def_l1 = deficit_prob_per_lead.sel(lead=1)
+            l1 = fcst_rg.sel(lead=1)
+        else:
+            p_def_l1 = deficit_prob_per_lead.isel(lead=0)
+            l1 = fcst_rg.isel(lead=0)
+        ens_mean_l1 = l1.mean(dim="member")
+        ens_min_l1  = l1.min(dim="member")
+        ens_max_l1  = l1.max(dim="member")
+        ens_min_anylead = fcst_rg.min(dim="member").min(dim="lead")
+        deficit_threshold_label = f"scalar:{args.deficit_spi}"
+        crosses_rp_any = (fcst_rg <= rp_thresh).any(dim=["member", "lead"]).astype("float32")
 
     # ── Zonal aggregation ────────────────────────────────────────────────────
     fc_mask = build_mask(adm1, rp_thresh.lat, rp_thresh.lon)
@@ -556,9 +659,8 @@ def main() -> None:
     eprob_l1_adm  = zonal_reduce(p_def_l1, fc_mask, rp_thresh.lat, n_adm)
     spatial_cov_adm = zonal_reduce(p_deficit, fc_mask, rp_thresh.lat, n_adm, thresh=0.5)
 
-    # Hotspot fraction: pixels where any (member, lead) crosses RP threshold
-    crosses_rp = (fcst_rg <= rp_thresh).any(dim=["member", "lead"]).astype("float32")
-    hotspot_frac_adm = zonal_reduce(crosses_rp, fc_mask, rp_thresh.lat, n_adm, thresh=0.5)
+    # Hotspot fraction: pixels where any forecast member crosses RP
+    hotspot_frac_adm = zonal_reduce(crosses_rp_any, fc_mask, rp_thresh.lat, n_adm, thresh=0.5)
 
     # Tail-risk: ens-min SPI per boundary (p5 = drought-side; mean; peak)
     ens_min_p5_adm   = zonal_quantile(ens_min_anylead, fc_mask, n_adm, q=0.05)
@@ -573,7 +675,7 @@ def main() -> None:
     eprob_def_adm    = fill_small_boundaries(eprob_def_adm,    p_deficit, adm1)
     eprob_l1_adm     = fill_small_boundaries(eprob_l1_adm,     p_def_l1, adm1)
     spatial_cov_adm  = fill_small_boundaries(spatial_cov_adm,  p_deficit, adm1, thresh=0.5)
-    hotspot_frac_adm = fill_small_boundaries(hotspot_frac_adm, crosses_rp, adm1, thresh=0.5)
+    hotspot_frac_adm = fill_small_boundaries(hotspot_frac_adm, crosses_rp_any, adm1, thresh=0.5)
     ens_min_p5_adm   = fill_small_boundaries(ens_min_p5_adm,   ens_min_anylead, adm1)
     ens_min_mean_adm = fill_small_boundaries(ens_min_mean_adm, ens_min_anylead, adm1)
     ens_min_peak_adm = fill_small_boundaries(ens_min_peak_adm, ens_min_anylead, adm1)
@@ -610,6 +712,12 @@ def main() -> None:
         "ens_max_lead1_spi":  np.round(ens_max_l1_adm,  4),
         "target_date": str(D.date()),
     })
+    if seasonal_mode:
+        df.insert(3, "init_month", str(I.date()))
+        df.insert(4, "target_season", target_season)
+        df.insert(5, "lead_index_used", target_lead)
+        df.insert(6, "deficit_threshold_source", deficit_threshold_label)
+        df.insert(7, "ensemble_size", args.ensemble_size)
 
     if args.soft_evidence:
         add_soft_columns(df,
@@ -623,7 +731,8 @@ def main() -> None:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
-    print(f"[prep] wrote {out}  rows={len(df)}  cols={len(df.columns)}  "
+    mode_label = ("v2 seasonal" if seasonal_mode else "v1 single-month")
+    print(f"[prep] wrote {out}  ({mode_label})  rows={len(df)}  cols={len(df.columns)}  "
           f"cur_spi_mean={np.nanmean(cur_spi_adm):.2f}  "
           f"def_prob_mean={np.nanmean(eprob_def_adm):.3f}")
 
