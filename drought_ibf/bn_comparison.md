@@ -233,3 +233,215 @@ copy-rename of the flood functions. Drought reads `member_min_spi` and
 The clean split between "BN engine" (identical, well-tested in flood)
 and "domain mapping" (small, audited per hazard) is what made the
 1247→1027-line port tractable.
+
+---
+
+# Drought BN v2 — seasonal redesign (planned)
+
+The v1 drought BN (above) is a single-month snapshot: it asks
+"what's the drought risk this month given current SPI3 + a 6-lead
+ensemble forecast?". That structure ports flood's daily snapshot well
+but **leaves the seasonal climatology of East Africa on the table** —
+SPI3 evidence is most meaningful when interpreted at season level
+(MAM, JJA, OND, DJF), and the SEAS5.1 lead-time table in
+`drought_crma/itt-seasonal-docs.rst` makes the mapping explicit.
+
+v2 reorganises the same 5-parent topology around **seasons** rather
+than calendar months, and restricts the ensemble-derived parents to
+the **first 25 SEAS5.1 members** (the only block with a complete
+1981–present hindcast — see "Why first 25 members" below).
+
+## Target seasons (from `itt-seasonal-docs.rst`, lines 72-112)
+
+| Season | Months | Valid (SPI-3 anchor) | Init months & lead indices |
+|---|---|---|---|
+| **MAM** | Mar–Apr–May | May (m=5) | Dec lead 4, Jan lead 3, Feb lead 2 |
+| **JJA** | Jun–Jul–Aug | Aug (m=8) | Mar lead 4, Apr lead 3, May lead 2 |
+| **OND** | Sep–Oct–Nov | Nov (m=11) | Jun lead 4, Jul lead 3, Aug lead 2 |
+| **DJF** | Dec–Jan–Feb | Feb (m=2) | Sep lead 4, Oct lead 3, Nov lead 2 |
+
+`lead_idx = (target_valid_month − init_month) mod 12 − 1` (0-based).
+The script driver picks the target season from the run config; the
+init month is "this month" (the latest available SEAS5.1 init); the
+lead index falls out of the table.
+
+In v2 the BN runs **once per (boundary × target_season)** — typically
+the current season + the next two — instead of once per (boundary).
+
+## Per-parent changes (drought v1 → drought v2)
+
+| Slot | v1 (single snapshot) | v2 (seasonal) |
+|---|---|---|
+| **P1 `current_spi3`** | latest single-month ERA5 SPI3 value at boundary | ERA5 SPI3 across the **last 6 months** at boundary, **bucketed by season** (mean SPI3 per season in the lookback). The "value" passed to the categoriser is the SPI3 of the season *immediately preceding* the target — i.e. how dry are we *going into* the target window. |
+| **P2 `deficit_prob`** | mean over leads of `P(SPI ≤ −1)` across all 51 members | for the **target season only**, mean of `P(SPI ≤ RP_threshold)` over the leads pointing to that season's months, using **members 0..24** (first 25, see below). Three leads per season per init (table above). |
+| **P3 `spatial_coverage`** | unchanged (max of P_deficit ≥ 0.5 mask & hotspot fraction) | unchanged in form; same metric computed on the season-restricted forecast slice. |
+| **P4 `spi3_trend`** | slope of last 6 months' ERA5 SPI3 (slope SPI/month) | **same metric** but explicitly tied to the obs window described in P1; documented as "6-month obs slope". |
+| **P5 `tail_risk`** | p5 of ens-min SPI across all leads × 51 members | p5 of ens-min SPI across the **target-season's leads × first 25 members**. |
+
+Forecast-agreement (P6, optional) stays the same.
+
+## Threshold source: `era5_ecmwf_rp_icechunk` (per-pixel SPI RPs)
+
+The deficit threshold used inside P2 is **no longer hardcoded at -1.0**.
+v2 reads the per-pixel fitted SPI return-period thresholds from
+`e4drr-project/observations/era5_ecmwf_rp_icechunk` (already loaded by
+v1 prep but only for diagnostic columns). The default RP for triggers
+is **5-yr** (≈ -0.84 SPI) — matches the threshold defaults in
+`07-plot-sea51-forecast.py` (`-0.68 / -0.84`).
+
+`P(SPI_lead ≤ RP_pixel(rp_year))` then varies in space, capturing the
+fact that a -1.0 SPI is a 5-yr event in arid Karamoja but a 10-yr event
+in the Lake Victoria basin.
+
+## Why the first 25 members (calibration coverage)
+
+SEAS5 system-51 has 51 ensemble members but their historical coverage
+differs:
+
+- **Members 0–24** are present in the **full hindcast / reanalysis
+  block 1981–present** — the same 25 members are re-run for every
+  past month, providing a continuous 1981–now climatology.
+- **Members 25–50** were **added from 2017 onwards** as an extended
+  ensemble. Before 2017 these members do not exist.
+
+For SPI calibration, we need a continuous reference period (the SPI
+gamma fit uses 1981–2024 in `01-run-process-spi.py`, lines 561-573,
+with cal windows `1991-01..2018-01` for members <25 and a shorter
+`2017-01..2024-01` for members ≥25 — exactly because the first
+calibration window can't be applied to the post-2017-only members).
+
+To keep the **calibration period identical across all the members
+feeding the BN**, v2 restricts P2 (deficit prob) and P5 (tail risk)
+to `members[0:25]`. The remaining 26 members are still present in
+the published forecast store; they're just left out of the BN evidence
+to avoid mixing two different calibration regimes.
+
+v2 applies `fcst.isel(member=slice(0, 25))` consistently for both
+**P2** (deficit prob) and **P5** (tail risk). v1's per-member sidecar
+remains unchanged (still emits all 51 for storyline picking).
+
+## Run cadence
+
+v1 cadence: 1 BN run per boundary per month (227 runs / month).
+
+v2 cadence: 1 BN run per boundary per (target_season, init_month).
+
+| Init month | Target seasons | BN runs/month |
+|---|---|---|
+| Jan | MAM (this year, lead 3); JJA (lead 6) | 227 × 2 = 454 |
+| Feb | MAM (lead 2); JJA (lead 5) | 454 |
+| Mar | JJA (lead 4); … | 454 |
+| Apr | JJA (lead 3); OND (lead 6) | 454 |
+| ... | ... | ... |
+
+Approximately doubles the per-boundary count, still well under the
+flood pipeline's 227 boundaries × 7 lead durations × 51 members
+storyline volume.
+
+## Output schema (v2)
+
+```
+id, name, country, target_date, init_month,
+target_season,            # MAM / JJA / OND / DJF
+lead_indices_used,        # e.g. "2,3,4" (the 3 leads for this season from this init)
+
+# P1 evidence (per-season obs)
+current_spi3_target_season,        # SPI3 of the season immediately before target
+season_means_obs,                  # JSON: {"OND_2025": -0.4, "DJF_2025-26": -0.8, ...}
+current_spi3_category,             # 5-state hard label
+
+# P2 evidence (per-season forecast)
+forecast_deficit_prob,             # mean over season's leads, members 0..24
+deficit_threshold_used,            # the RP-derived SPI threshold
+deficit_threshold_source,          # e.g. "era5_ecmwf_rp_icechunk:5yr fitted"
+
+# P3
+spatial_coverage,
+spatial_cov_mean_p, hotspot_fraction,
+
+# P4
+spi3_trend, trend_slope_spi_per_month,
+
+# P5 (tail) — first 25 members only
+ens_min_spi_25, ens_min_spi_25_mean, ens_min_spi_25_peak,
+
+# Diagnostics
+ens_mean_target_spi, ens_min_target_spi, ens_max_target_spi,
+
+# Optional soft-evidence cols (same prefixes as v1: cur, def, spa, trn, tail)
+```
+
+`drought_bn_ibf_v1.jl` reads this schema as-is — only `current_spi3` →
+`current_spi3_target_season` is renamed in the BoundaryInput
+constructor, and the new `target_season` / `init_month` columns are
+passed through to the output. **The BN engine is unchanged.**
+
+## Implementation plan
+
+1. **`drought_data_prep.py` v2** (~30 % rewrite of v1):
+   - new CLI: `--init-month YYYY-MM --target-season {MAM,JJA,OND,DJF}` (replacing `--date`)
+   - season → lead-index lookup table from the seasonal doc
+   - obs window: last 6 months pre-target, bucketed by season
+   - forecast slice: pick lead indices for the target season,
+     `members 0..24`, then compute `P(SPI ≤ RP_pixel(rp_year))`
+   - per-pixel RP threshold from `era5_ecmwf_rp_icechunk` (already in
+     the prep imports, just consume it for P2 too)
+   - tail: `fcst.isel(member=slice(0, 25)).min(dim=("member", "lead"))`
+   - new output columns listed above
+2. **`drought_bn_ibf_v1.jl`**:
+   - rename `current_spi3` → `current_spi3_target_season` in the CSV
+     reader (1-line change)
+   - emit `target_season` + `init_month` in the result CSV (5-line
+     change in `run_csv`)
+   - **no changes to the BN engine, the @model functions, the CPT, or
+     the CRMA decision rule.**
+3. **`drought_bn_ibf_v1.py`** (reference): mirror the column-name
+   change; its CPT divergence with the Julia version is unchanged.
+4. **README** + this doc: add a "v2 / seasonal" section above the
+   "Usage" examples; keep v1 examples for back-compat until v2 is
+   verified.
+5. **Optional driver script** `run_drought_bn_seasonal.sh`:
+   loop over (init_month, target_season) pairs for the upcoming
+   seasons and call prep + BN per pair.
+
+## What stays identical (v1 → v2)
+
+- Graph topology (5 parents → risk → action; CRMA derived).
+- State cardinalities (5/5/3/3/4 → 5 → 4).
+- RxInfer `@model` factor graph + DiscreteTransition + diageye channels.
+- `compute_risk_probs` arithmetic + 8 expert-rule probability vectors.
+- `compute_crma_state` cost-loss decision rule (γ default 0.20).
+- DBN temporal coupling structure (cadence becomes per-season-init).
+- Per-member storyline picker.
+- Soft-evidence column prefixes (`cur, def, spa, trn, tail`).
+
+The redesign is a **prep-side reorganisation** of how the 5 evidence
+values are computed; the inference layer is untouched.
+
+## Open questions for review
+
+1. **Trend window vs target season**: should the slope come from the
+   last 6 obs months (current v1) or only from the season(s) leading
+   into the target (e.g. MAM target → use only DJF slope)? The latter
+   tightens the seasonal interpretation but may give a noisier slope.
+2. **DBN chaining**: v1 chains month-to-month. v2's natural chain is
+   season-to-season for a fixed target — i.e. the MAM-from-Dec
+   posterior priors the MAM-from-Jan run. Lookback would be the
+   3 inits-per-target sequence rather than 6 calendar months.
+3. **Storyline picker on 25 members vs 51**: v2 uses members 0–24 for
+   the BN evidence; the per-member sidecar still sweeps all 51 for
+   variety. Should the storyline picker also restrict to 0–24 for
+   consistency with the calibration window, or keep 51 for diversity
+   (members 25–50 still have valid post-2017 climatology)?
+4. **Multi-season simultaneous output**: the cleanest run pattern is
+   1 BN call per (boundary × target_season). Should the result CSV
+   pivot back to one-row-per-boundary with `risk_*_{MAM,JJA,OND,DJF}`
+   columns, or keep one-row-per-(boundary, season) long format? Long
+   format is simpler for downstream (mirrors flood's per-day rows).
+5. **RP year as evidence axis**: v2 fixes RP year per run. We could
+   instead emit P2 across multiple RP years (3, 5, 10, 20, 50) as
+   sensitivity columns and let the BN consume the user-chosen one.
+   v1 already accepts `--rp-years`; v2 keeps the same convention.
+
+A first cut of v2 prep + the 6-line BN driver patch is a ~1-day task
+and can land on a `drought-v2-seasonal` branch alongside this doc.
