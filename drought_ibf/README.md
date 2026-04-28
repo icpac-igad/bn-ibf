@@ -103,6 +103,53 @@ uv run drought_bn_ibf_v1.py \
     --soft-evidence
 ```
 
+### 2b. Julia/RxInfer.jl (primary, parity with flood_ibf)
+
+The Julia script `drought_bn_ibf_v1.jl` mirrors `flood_ibf/flood_bn_ibf_v1.jl`
+1:1 in structure: same RxInfer message-passing engine, same direct-matmul +
+tensor-contraction fallback, same DBN temporal-coupling and per-member
+storyline picker. `Project.toml` and `Manifest.toml` are inherited from
+`flood_ibf/`.
+
+```bash
+# Self-test (worst/best/agreement-entropy assertions)
+julia --project=. drought_bn_ibf_v1.jl --test
+
+# Run on a single CSV (RxInfer backend, default)
+julia --project=. drought_bn_ibf_v1.jl \
+    --input-csv  bn_inputs/drought_inputs_2026-04.csv \
+    --output-csv output/drought_bn_v1_2026-04.csv \
+    --no-agreement --tail-risk
+
+# Optional: legacy direct-matmul fallback
+julia --project=. drought_bn_ibf_v1.jl \
+    --input-csv  bn_inputs/drought_inputs_2026-04.csv \
+    --output-csv output/drought_bn_v1_2026-04.csv \
+    --no-agreement --tail-risk --legacy-inference
+```
+
+The Julia script reads the same CSV produced by `drought_data_prep.py`
+(soft-evidence columns `cur_p1..p5, def_p1..p5, spa_p1..p3, trn_p1..p3,
+tail_p1..p4` are picked up automatically when present).
+
+> **CPT divergence between Julia and Python (intentional, for now)**:
+> `drought_bn_ibf_v1.jl` uses the discrete expert-rules CPT ported
+> directly from `flood_bn_ibf_v1.jl` (base-risk score + scenario rules
+> with hardcoded probability vectors). `drought_bn_ibf_v1.py` uses a
+> smooth weighted-sum-then-Gaussian-binning CPT — easier to tune but
+> not numerically equivalent. Cross-validation on the 2026-04 CSV gives
+> max-abs |Δrisk| ≈ 0.65 between the two engines (CRMA agrees on
+> 79/227 boundaries). **Treat the Julia output as authoritative**;
+> use the Python as a sanity-only reference until its CPT is aligned
+> with the Julia one.
+
+Julia self-test (smoke):
+```bash
+julia --project=. drought_bn_ibf_v1.jl --test
+```
+runs three synthetic boundary checks (worst case → Extreme/Act, best
+case → Minimal/Monitor, low-agreement entropy higher).
+
 Soft evidence emits 5+5+3+3+4 = 20 columns (`{cur,def,spa,trn,tail}_p[1..K]`)
 which the BN consumes via direct tensor contraction (no pgmpy required).
 
@@ -186,7 +233,9 @@ without re-running the upstream SPI calculation.
 
 ```
 drought_data_prep.py          # CSV builder (drought analogue of flood_data_prep.py)
-drought_bn_ibf_v1.py          # BN + CRMA decision (Python; pgmpy or tensor-contract)
+drought_bn_ibf_v1.jl          # Julia/RxInfer BN — primary (parity with flood_bn_ibf_v1.jl)
+drought_bn_ibf_v1.py          # Python reference (pgmpy or tensor-contract)
+Project.toml, Manifest.toml   # Julia env (inherited from flood_ibf)
 README.md                     # this file
 ```
 
