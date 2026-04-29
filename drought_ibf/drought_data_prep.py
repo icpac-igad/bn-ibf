@@ -160,6 +160,14 @@ def open_icechunk_anon(prefix: str) -> xr.Dataset:
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
 
+# Nodes whose soft-evidence column order must be REVERSED to match the
+# drought-side Julia STATES (which list low-stress at idx 1, high-stress at
+# idx K). _NODE_EDGES uses physical-axis order (increasing SPI for cur/tail,
+# increasing slope for trn) — for SPI-style axes that means low-stress is
+# at the *high* end, so the natural CDF-bin order needs to flip.
+_REVERSE_NODES = {"cur", "tail", "trn"}
+
+
 def soft_bin(x: float, node: str, sigma: float | None = None) -> np.ndarray:
     from scipy import stats as _st
     edges = _NODE_EDGES[node]
@@ -168,6 +176,8 @@ def soft_bin(x: float, node: str, sigma: float | None = None) -> np.ndarray:
         return np.full(k, 1.0 / k)
     s = _NODE_SIGMA_DEFAULT[node] if sigma is None else sigma
     probs = np.diff(_st.norm.cdf(edges, loc=x, scale=s))
+    if node in _REVERSE_NODES:
+        probs = probs[::-1]
     tot = probs.sum()
     return probs / tot if tot > 0 else np.full(k, 1.0 / k)
 
@@ -249,7 +259,12 @@ def load_obs_spi3_window(obs: xr.Dataset, target: pd.Timestamp,
 
 def load_forecast_spi3(forecast: xr.Dataset, target: pd.Timestamp) -> xr.DataArray:
     """Forecast SPI3 (lead × member × lat × lon) for the init at `target`,
-    or the latest init <= target if target is not present."""
+    or the latest init <= target if target is not present.
+
+    Loads lead-by-lead and stitches into a numpy-backed DataArray. This
+    avoids the chunk-decompression memory spike that crashes 8 GB VMs
+    when the full (6, 51, 351, 321) slab is requested in one .load().
+    """
     inits = pd.to_datetime(forecast.init.values)
     upper = inits[inits <= target]
     if len(upper) == 0:
@@ -259,8 +274,15 @@ def load_forecast_spi3(forecast: xr.Dataset, target: pd.Timestamp) -> xr.DataArr
     if chosen != target:
         print(f"[prep] note: target={target.date()}, using nearest "
               f"SEAS5 init={chosen.date()}")
-    da = forecast.spi3.sel(init=chosen).load()  # (lead, member, lat, lon)
-    return da
+    da = forecast.spi3.sel(init=chosen)  # (lead, member, lat, lon), still lazy
+    leads = da.lead.values
+    parts = []
+    for lv in leads:
+        chunk = da.sel(lead=lv).load()  # ~22 MB each (51 × 351 × 321 × 4)
+        parts.append(chunk)
+        print(f"  loaded lead={int(lv)}: shape={chunk.shape}, "
+              f"mem={chunk.nbytes/1024**2:.0f} MB", flush=True)
+    return xr.concat(parts, dim="lead")
 
 
 # ─── RP loading ──────────────────────────────────────────────────────────────
@@ -579,24 +601,58 @@ def main() -> None:
     cur_spi_adm = fill_small_boundaries(cur_spi_adm, cur_spi3_grid, adm1)
     print("[prep] cur_spi_adm computed", flush=True)
 
-    # Slope of monthly SPI3 over the trend window
+    # Slope of monthly SPI3 over the trend window — fast numpy path that
+    # avoids re-broadcasting xarray weights inside a per-timestep zonal loop
+    # (which OOMs on small VMs because xarray re-allocates the weight grid
+    # each call).
     n_t = obs_spi3.sizes["time"]
+    print(f"[prep] computing per-region SPI3 slope over {n_t} months ...", flush=True)
+    obs_vals = np.asarray(obs_spi3.values, dtype=np.float64)         # (t, lat, lon)
+    mask_arr = np.asarray(obs_mask.values)                            # (lat, lon)
+    weights_1d = np.cos(np.deg2rad(np.asarray(obs_spi3.lat.values))) # (lat,)
+    w2d = weights_1d[:, None] * np.ones(obs_vals.shape[1:])           # (lat, lon)
     obs_adm = np.full((n_t, n_adm), np.nan, dtype=np.float64)
-    for ti in range(n_t):
-        obs_adm[ti] = zonal_reduce(obs_spi3.isel(time=ti), obs_mask, obs_spi3.lat, n_adm)
+    for r in range(n_adm):
+        sel = mask_arr == r
+        if not sel.any():
+            continue
+        w_sel = w2d[sel]
+        denom = float(w_sel.sum())
+        if denom <= 0:
+            continue
+        # Vectorised over time: (t, n_pixels) * (n_pixels,)
+        vals_sel = obs_vals[:, sel]                                    # (t, n_pix)
+        valid = np.isfinite(vals_sel)
+        # weighted mean per timestep, ignoring NaN pixels
+        ws = (w_sel * valid).sum(axis=1)
+        num = np.where(valid, vals_sel * w_sel, 0.0).sum(axis=1)
+        obs_adm[:, r] = np.where(ws > 0, num / np.where(ws > 0, ws, 1.0), np.nan)
+    print(f"[prep] obs_adm slope-input matrix built: {obs_adm.shape}", flush=True)
+
     x = np.arange(n_t, dtype=np.float64)
     slopes = np.full(n_adm, np.nan)
     for i in range(n_adm):
         y = obs_adm[:, i]
         if np.isfinite(y).all() and n_t >= 2:
             slopes[i] = float(np.polyfit(x, y, 1)[0])
+    print(f"[prep] slopes computed", flush=True)
     trend_cls = np.array([classify_trend(s, args.trend_band) for s in slopes])
     cur_cat = np.array([categorize_current_spi(s) for s in cur_spi_adm])
+
+    # ── Free obs arrays before opening the forecast — small VMs can't
+    # hold both the obs reader, the regionmask machinery, and a 135 MB
+    # forecast load + intermediate chunk decompression buffers.
+    import gc
+    del obs_vals, obs_adm, w2d, weights_1d, mask_arr, obs_spi3, obs
+    gc.collect()
 
     # ── Forecast: lead × member × lat × lon for the chosen init ─────────────
     # v1: init = target month D
     # v2: init = I (--init-month); slice will then pick the season's anchor lead.
+    print(f"[prep] loading SEAS5 forecast for init {I.date()} ...", flush=True)
     fcst = load_forecast_spi3(forecast, I)
+    print(f"[prep] loaded SEAS5 forecast {dict(fcst.sizes)}, "
+          f"dtype={fcst.dtype}, mem≈{fcst.nbytes/1024**2:.0f} MB", flush=True)
     if args.clip_spi > 0:
         fcst = fcst.clip(-args.clip_spi, args.clip_spi)
     print(f"[prep] forecast dims: {dict(fcst.sizes)} "
