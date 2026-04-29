@@ -359,6 +359,178 @@ pass values. Calibrate against:
 
 ---
 
+## 5e. EAHW droughtwatch → icechunk store
+
+The FTP NetCDFs at `https://droughtwatch.icpac.net/ftp/dekadal/netcdf/`
+are dekadal files with one variable each — fast enough for a single
+month, slow if we want a hindcast across all dekads since 2010 (~ 600
+files). A one-time `eahw_cdi_to_icechunk.py` builds an icechunk store
+on source.coop with the same access ergonomics as
+`era5_ecmwf_pencil` / `chirps_spi_icechunk`:
+
+```
+INPUT  : the ~600 dekadal NetCDFs from droughtwatch (cdi_YYYYMMDD.nc)
+OUTPUT : s3://us-west-2.opendata.source.coop/e4drr-project/
+                observations/eahw_cdi_icechunk
+SCHEMA :
+  dims:    (time, lat, lon)
+  vars:    cdi_class    int8      1..14 per cdi-method.md
+           cdi_level    int8      1..6  encoded (1=No_drought, ...,
+                                                 4=Watch, 5=Warning,
+                                                 6=Alert)
+           # leave the JRC level integer in a coord attr so the
+           # mapping is self-describing
+  chunks:  slab (1, full_lat, full_lon) — same access pattern as
+           the SEAS5 SPI3 slab store: per-dekad zonal aggregation
+           is the dominant query
+```
+
+Build pattern mirrors `download_seas51_tp_to_icechunk.py`'s init+fill:
+- Init template with the full time dim (one entry per published dekad)
+- Fill per dekad — region write per `time` slice, single commit
+- `--resume` flag to skip already-filled dekads (for incremental
+  weekly updates as new EAHW files appear on the FTP)
+
+Once published, the `cdi_ingest_droughtwatch.py` script reduces to
+the same anonymous-icechunk-read pattern as
+`drought_data_prep.py` for ERA5 SPI3 — a few seconds per month
+instead of an HTTP round-trip per file.
+
+## 5f. Multi-source CDI evidence — fallback chain vs. two parent nodes
+
+You raised the right question: with **two** sources of CDI (the
+published EAHW and the recomputed-from-components), should they
+feed the BN as **two parents**, **one parent with source priority**,
+or **gracefully fall back when missing**?
+
+The Bayesian-network answer is *all three are valid, but they encode
+different beliefs about how the two sources relate*. Picking
+between them changes how confident the posterior is when the two
+agree, and how the posterior diffuses when one is absent.
+
+### Option α — one `cdi_obs` node with a source-priority chain
+
+Data prep picks one source per boundary in this order:
+
+```
+1. EAHW droughtwatch  (preferred — published, validated, JRC-aligned)
+2. Recomputed CDI     (fallback — calculate_cdi() over CHIRPS+SMA+fAPAR)
+3. missing            (BN marginalises, posterior reverts to the other
+                       5 parents — the existing forecast + ERA5 SPI3
+                       obs path runs unchanged)
+```
+
+The BN graph stays at 6 parents (5 existing + `cdi_obs`). When all
+sources are missing, `cdi_data` carries `missing` rather than a
+probability vector and RxInfer's `DiscreteTransition` channel
+becomes a no-op — exactly the "BN acts as a belief update with
+available evidence" behaviour you want.
+
+A `cdi_source` diagnostic column (`eahw` / `recomputed` /
+`missing`) goes into the prep CSV so we can audit which source
+each posterior was anchored on.
+
+**This is the recommended starting point** because it is the
+simplest extension and avoids the double-counting trap below.
+
+### Option β — two parents `cdi_eahw_obs` and `cdi_recomputed_obs`
+
+```mermaid
+flowchart LR
+    EAHW[(EAHW droughtwatch)] --> N1[cdi_eahw_obs<br/>6 states]
+    REC[(recomputed)]         --> N2[cdi_recomputed_obs<br/>6 states]
+    N1 --> R[risk_level]
+    N2 --> R
+    OTHER[5 existing parents] --> R
+```
+
+Each can be `missing` independently; when **both** are present they
+contribute *both* to the posterior.
+
+This looks attractive — extra evidence usually helps — but there is
+a **double-counting trap**: the two CDI sources are **not
+independent**. They are computed from the same physical CHIRPS
+precipitation + GDO SMA + GDO fAPAR data, just with different
+processing chains. In a strict BN, two parents that share an
+unobserved ancestor double-count the shared signal unless we model
+the dependency explicitly.
+
+When EAHW and recomputed *agree*, this is the desired behaviour:
+strong evidence → tighter posterior. When they *disagree*, the
+two-parent structure makes the BN strangely overconfident in
+*both* states at once and the posterior diffuses harder than it
+should. The flag bit you actually want — "the two sources
+disagree, so be less confident" — is lost.
+
+### Option γ — one `cdi_obs` node, soft evidence encodes source agreement
+
+Hybrid of α and β. Data prep:
+
+```
+if both available:
+    if eahw == recomputed:                     # confident
+        cdi_p[level] = 1.0                      # one-hot at the level
+    else:                                       # disagreement
+        cdi_p[eahw_level]      = 0.5
+        cdi_p[recomputed_level] = 0.5            # split mass
+elif only one available:
+    cdi_p[available_level] = 0.95               # slight haircut
+    everywhere else        = 0.05/(K-1)
+else:
+    cdi_p = uniform                             # no evidence ⇒ no-op
+```
+
+This gives the BN a *probability vector* on `cdi_obs` instead of a
+one-hot, and the existing soft-evidence path (already wired up
+through `cdi_p1..cdi_p6`) does the right thing. Source-disagreement
+becomes uncertainty in the evidence channel, which is the
+mathematically clean way to express it.
+
+### Option δ (research) — noisy-channel two-parent structure
+
+Add a hidden `cdi_true` node with the two observed CDI's as its
+*children* (not its parents):
+
+```
+            cdi_true (hidden, 6 states)
+              ├── cdi_eahw_obs        (observation noise CPT)
+              └── cdi_recomputed_obs  (observation noise CPT)
+              └── risk_level          (one of risk_level's parents)
+```
+
+`cdi_true` is what the BN actually conditions on. The two observed
+nodes have CPTs of the form P(observed | cdi_true) that encode
+each source's measurement noise. This is the textbook structure
+for "two noisy measurements of the same latent quantity" and
+correctly handles disagreement without double-counting.
+
+The cost: introduces inference over a hidden node, which the
+RxInfer message-passing engine can do but the direct-matmul path
+cannot (a few extra weight tensors needed). Worth pursuing as a
+v2 once the simpler design is in production.
+
+### Recommendation
+
+- **Now (Path B-α)**: one `cdi_obs` parent, source-priority chain
+  EAHW → recomputed → missing, plus a `cdi_source` diagnostic
+  column. Same 6-parent CPT in the BN. Graceful degradation when
+  any/all CDI sources are missing.
+- **Soon (Path B-γ)**: upgrade the data-prep step so `cdi_obs`
+  consumes a *probability vector* instead of a one-hot when the
+  two sources are present and disagree — encoding source-agreement
+  as evidence-channel certainty. No BN code change.
+- **Later (Path B-δ)**: the noisy-channel structure with a hidden
+  `cdi_true` node, once we have enough cross-source disagreement
+  data to fit the per-source noise CPT.
+
+The phrase you used — "the BN acts as a belief update with
+available evidence" — is *exactly* what virtual-evidence channels
+provide for free in RxInfer. Soft-marginalising over a `missing`
+observation is a one-line change in the @model. We do not need
+custom logic for "if both missing, fall back to ERA5 SPI3 obs" —
+the BN already does that, because `current_spi3` is one of the
+remaining 5 parents and continues to be observed normally.
+
 ## 6. Compatibility with existing engines
 
 | Path | RxInfer exact-rules path | matmul fallback |
