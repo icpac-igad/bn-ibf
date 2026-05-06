@@ -256,12 +256,12 @@ def compute_impact(
     # ── derive flood risk probability from BN output ──────────────────────
     # The BN CSV has ens_max_ratio as a proxy for tail risk signal;
     # flood_risk_prob = P(Flood ≥ High) is already computed by flood_bn_ibf_v1.jl
-    # and stored in the CSV.  If not present, proxy from gefs_eprob_heavy.
+    # and stored in the CSV.  If not present, proxy from ecmwf_eprob_heavy.
     if "flood_risk_prob" not in df.columns:
         if "p_flood_high" in df.columns:
             df["flood_risk_prob"] = df["p_flood_high"]
-        elif "gefs_eprob_heavy" in df.columns:
-            df["flood_risk_prob"] = df["gefs_eprob_heavy"]
+        elif "ecmwf_eprob_heavy" in df.columns:
+            df["flood_risk_prob"] = df["ecmwf_eprob_heavy"]
         else:
             df["flood_risk_prob"] = np.nan
 

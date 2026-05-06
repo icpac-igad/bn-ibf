@@ -54,7 +54,7 @@ def build_raw_ant(row: pd.Series) -> str:
 
 
 def build_raw_exc(row: pd.Series) -> str:
-    p = row.get("gefs_eprob_heavy", float("nan"))
+    p = row.get("ecmwf_eprob_heavy", float("nan"))
     if pd.isna(p):
         return "N/A"
     return f"P={p:.3f}"

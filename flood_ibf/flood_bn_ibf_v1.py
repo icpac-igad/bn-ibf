@@ -573,7 +573,7 @@ class FloodDataLoaderV1:
             # Add GEFS probabilities (placeholder for now)
             # In real implementation, extract from gefs_probs dataset
             boundary_data['gefs_eprob_moderate'] = np.nan
-            boundary_data['gefs_eprob_heavy'] = np.nan
+            boundary_data['ecmwf_eprob_heavy'] = np.nan
             boundary_data['gefs_eprob_very_heavy'] = np.nan
             boundary_data['gefs_eprob_extreme'] = np.nan
 
@@ -892,7 +892,7 @@ class FloodBayesianNetworkV1:
                 boundary_data.get('antecedent_category', 'Normal'), 'antecedent'
             ),
             'exceedance_prob': self._categorize(
-                boundary_data.get('gefs_eprob_heavy', 0.0), 'exceedance'
+                boundary_data.get('ecmwf_eprob_heavy', 0.0), 'exceedance'
             ),
             'spatial_coverage': self._categorize(
                 boundary_data.get('spatial_coverage', 0.0), 'spatial'
@@ -928,7 +928,7 @@ class FloodBayesianNetworkV1:
             'antecedent_category': boundary_data.get('antecedent_category', 'Unknown'),
             'rainfall_trend': boundary_data.get('rainfall_trend', 'Stable'),
             'gefs_eprob_moderate': boundary_data.get('gefs_eprob_moderate', np.nan),
-            'gefs_eprob_heavy': boundary_data.get('gefs_eprob_heavy', np.nan),
+            'ecmwf_eprob_heavy': boundary_data.get('ecmwf_eprob_heavy', np.nan),
             'gefs_eprob_very_heavy': boundary_data.get('gefs_eprob_very_heavy', np.nan),
             'gefs_eprob_extreme': boundary_data.get('gefs_eprob_extreme', np.nan),
             'spatial_coverage_pct': boundary_data.get('spatial_coverage', 0.0) * 100,
@@ -1050,7 +1050,7 @@ def analyze_flood_risk(
 
     cols = ['boundary_id', 'boundary_name', 'country',
             'antecedent_rainfall_mm', 'antecedent_category', 'rainfall_trend',
-            'gefs_eprob_heavy', 'gefs_eprob_very_heavy', 'gefs_eprob_extreme',
+            'ecmwf_eprob_heavy', 'gefs_eprob_very_heavy', 'gefs_eprob_extreme',
             'spatial_coverage_pct', 'forecast_agreement',
             'risk_level', 'recommended_action', 'confidence']
     output_cols = [c for c in cols if c in results.columns]
