@@ -167,7 +167,7 @@ def render_day(inp_row: pd.Series, out_row: pd.Series,
     trend = str(inp_row["rainfall_trend"])
     trend_slope = float(inp_row["trend_slope_mm_per_day"])
 
-    ep = float(inp_row["gefs_eprob_heavy"])
+    ep = float(inp_row["ecmwf_eprob_heavy"])
     ep_state = cat_exceedance(ep)
 
     sc = float(inp_row["spatial_coverage"])

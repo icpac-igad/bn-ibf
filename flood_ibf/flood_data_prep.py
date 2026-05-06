@@ -13,7 +13,7 @@ consumed by flood_bn_ibf_v1.jl:
     id, name, country,
     antecedent_rainfall_mm, antecedent_category,
     rainfall_trend, trend_slope_mm_per_day,
-    gefs_eprob_heavy, eprob_24h, spatial_coverage,
+    ecmwf_eprob_heavy, eprob_24h, spatial_coverage,
     forecast_agreement, target_date
 """
 from __future__ import annotations
@@ -555,7 +555,7 @@ def main() -> None:
         "antecedent_category": "",
         "rainfall_trend": trend_cls,
         "trend_slope_mm_per_day": np.round(slopes, 3),
-        "gefs_eprob_heavy": np.round(eprob_heavy_adm, 4),
+        "ecmwf_eprob_heavy": np.round(eprob_heavy_adm, 4),
         "eprob_24h": np.round(eprob_24h_adm, 4),
         "spatial_coverage": np.round(spatial_cov_final, 4),
         "spatial_cov_mean_p": np.round(spatial_cov_adm, 4),

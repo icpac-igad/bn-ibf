@@ -602,7 +602,7 @@ struct BoundaryInput
     antecedent_rainfall_mm::Float64
     antecedent_category::String
     rainfall_trend::String
-    gefs_eprob_heavy::Float64
+    ecmwf_eprob_heavy::Float64
     spatial_coverage::Float64
     forecast_agreement::String
     ens_max_ratio::Float64
@@ -649,7 +649,7 @@ function process_boundary(
     cost_loss_ratio::Float64=0.2,
 )::BoundaryResult
     ant_idx = categorize_antecedent(b.antecedent_rainfall_mm)
-    exc_idx = categorize_exceedance(b.gefs_eprob_heavy)
+    exc_idx = categorize_exceedance(b.ecmwf_eprob_heavy)
     spa_idx = categorize_spatial(b.spatial_coverage)
     tre_idx = categorize_trend(b.rainfall_trend)
     agr_idx = categorize_agreement(b.forecast_agreement)
@@ -680,7 +680,7 @@ function process_boundary_rxinfer(
     iterations::Int=10,
 )::BoundaryResult
     ant_idx = categorize_antecedent(b.antecedent_rainfall_mm)
-    exc_idx = categorize_exceedance(b.gefs_eprob_heavy)
+    exc_idx = categorize_exceedance(b.ecmwf_eprob_heavy)
     spa_idx = categorize_spatial(b.spatial_coverage)
     tre_idx = categorize_trend(b.rainfall_trend)
     tl_idx  = categorize_tail_risk(b.ens_max_ratio)
@@ -922,7 +922,7 @@ function run_dbn_sequence(
             bid = String(row.id)
 
             ant_idx = categorize_antecedent(Float64(row.antecedent_rainfall_mm))
-            exc_idx = categorize_exceedance(Float64(row.gefs_eprob_heavy))
+            exc_idx = categorize_exceedance(Float64(row.ecmwf_eprob_heavy))
             spa_idx = categorize_spatial(Float64(row.spatial_coverage))
             tre_idx = categorize_trend(String(row.rainfall_trend))
             tl_idx  = has_ratio ? categorize_tail_risk(Float64(row.ens_max_ratio)) : 1
@@ -1146,7 +1146,7 @@ function run_csv(input_csv::String, output_csv::String;
             Float64(row.antecedent_rainfall_mm),
             "",
             String(row.rainfall_trend),
-            Float64(row.gefs_eprob_heavy),
+            Float64(row.ecmwf_eprob_heavy),
             Float64(row.spatial_coverage),
             String(row.forecast_agreement),
             has_ratio ? Float64(row.ens_max_ratio) : 0.0,
