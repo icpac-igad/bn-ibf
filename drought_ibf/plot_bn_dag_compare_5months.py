@@ -55,6 +55,45 @@ RISK_LABELS = ["Min", "Low", "Mod", "Hi", "Ext"]
 CRMA_COLORS = {"Monitor": "#22c55e", "Evaluate": "#eab308",
                "Assess": "#f97316", "Actionable_Risk": "#dc2626"}
 
+# Base font sizes; multiplied by `scale` in helpers below so that
+# single-month (--single) renders can bump everything up uniformly.
+FS = {"node_title": 8.5, "node_window": 6.5, "node_raw": 7.5,
+      "bar_label": 7, "bar_state": 8, "risk_title": 9,
+      "crma_state": 9.5, "crma_phe": 7.5,
+      "panel_header": 10, "footer": 6.5}
+
+# White-background theme; same palette as the flood plotter.
+THEME = {
+    "fig_bg":     "white",
+    "ax_bg":      "white",
+    "box_bg":     "white",
+    "bar_track":  "#e2e8f0",
+    "bar_mode":   "#2563eb",
+    "title":      "#475569",
+    "window":     "#64748b",
+    "raw":        "#0f172a",
+    "state_dark": "#0f172a",
+    "label":      "#475569",
+    "header":     "#0f172a",
+    "footer":     "#64748b",
+    "caption":    "#334155",
+    "suptitle":   "#0f172a",
+    "risk_title": "#7c3aed",
+    "arrow":      "#94a3b8",
+}
+
+# DAG layout. box_scale=1.05 in render_dag (5% bigger than v1) and parent
+# row centred horizontally so there is no right-side gap.
+LAYOUT = {
+    "pw":  0.18, "ph": 0.26,
+    "gap": 0.008,
+    "py":  0.62,
+    "rw":  0.32, "rh": 0.20,
+    "ry":  0.30,
+    "cw":  0.30, "ch": 0.11,
+    "cy":  0.10,
+}
+
 # (month_tag, top_id, ctr_id, shared_spi3_cat, caption)
 PAIRINGS = [
     ("2024-01_MAM", "ETH.4_1",  "UGA.24_1",
@@ -80,7 +119,7 @@ PAIRINGS = [
 ]
 
 
-def _draw_prob_bars(ax, x, y, w, h, probs, abbrs, state, parent_color):
+def _draw_prob_bars(ax, x, y, w, h, probs, abbrs, state, parent_color, scale=1.0):
     n = len(probs)
     bw = w / n
     max_p = max(probs) if max(probs) > 0 else 1
@@ -90,56 +129,67 @@ def _draw_prob_bars(ax, x, y, w, h, probs, abbrs, state, parent_color):
         bx = x + i * bw
         ax.add_patch(mpatches.Rectangle((bx + bw * 0.08, y + h * 0.10),
                                          bw * 0.84, bar_h_total,
-                                         fc="#1e293b", ec="none", zorder=2))
+                                         fc=THEME["bar_track"], ec="none", zorder=2))
         filled = bar_h_total * (p / max_p)
         is_mode = (p == max(probs))
-        fc = "#2563eb" if is_mode else parent_color
+        fc = THEME["bar_mode"] if is_mode else parent_color
         ax.add_patch(mpatches.Rectangle((bx + bw * 0.08, y + h * 0.10),
                                          bw * 0.84, filled,
                                          fc=fc, ec="none", zorder=3))
         ax.text(bx + bw / 2, y + h * 0.075, label,
-                ha="center", va="top", fontsize=7, color="#94a3b8", zorder=4)
+                ha="center", va="top", fontsize=FS["bar_label"] * scale,
+                color=THEME["label"], zorder=4)
 
     ax.text(x + w / 2, y + h * 0.65, state,
-            ha="center", va="center", fontsize=8, fontweight="bold",
-            color="white", zorder=4)
+            ha="center", va="center", fontsize=FS["bar_state"] * scale,
+            fontweight="bold", color=THEME["state_dark"], zorder=4)
 
 
-def _draw_node_box(ax, x, y, w, h, title, raw, probs, abbrs, state, color, window=None):
+def _draw_node_box(ax, x, y, w, h, title, raw, probs, abbrs, state, color,
+                   window=None, scale=1.0):
     ax.add_patch(mpatches.FancyBboxPatch((x, y), w, h,
-                 boxstyle="round,pad=0.005", fc="#1e293b", ec=color, lw=1.2, zorder=1))
+                 boxstyle="round,pad=0.005", fc=THEME["box_bg"], ec=color,
+                 lw=1.2 * scale, zorder=1))
     ax.text(x + w * 0.05, y + h - 0.015, title,
-            ha="left", va="top", fontsize=8.5, color="#94a3b8", zorder=4)
+            ha="left", va="top", fontsize=FS["node_title"] * scale,
+            color=THEME["title"], zorder=4)
     if window:
         ax.text(x + w * 0.95, y + h - 0.015, window,
-                ha="right", va="top", fontsize=6.5, color="#64748b",
-                style="italic", zorder=4)
+                ha="right", va="top", fontsize=FS["node_window"] * scale,
+                color=THEME["window"], style="italic", zorder=4)
     ax.text(x + w / 2, y + h - 0.045, raw,
-            ha="center", va="top", fontsize=7.5, color="#cbd5e1", zorder=4)
-    _draw_prob_bars(ax, x, y, w, h, probs, abbrs, state, color)
+            ha="center", va="top", fontsize=FS["node_raw"] * scale,
+            color=THEME["raw"], zorder=4)
+    _draw_prob_bars(ax, x, y, w, h, probs, abbrs, state, color, scale=scale)
 
 
-def _draw_risk_node(ax, x, y, w, h, probs, state):
+def _draw_risk_node(ax, x, y, w, h, probs, state, scale=1.0):
     ax.add_patch(mpatches.FancyBboxPatch((x, y), w, h,
-                 boxstyle="round,pad=0.005", fc="#1e293b", ec="#7c3aed", lw=1.8, zorder=1))
+                 boxstyle="round,pad=0.005", fc=THEME["box_bg"],
+                 ec=THEME["risk_title"], lw=1.8 * scale, zorder=1))
     ax.text(x + w / 2, y + h - 0.012, "RISK", ha="center", va="top",
-            fontsize=9, fontweight="bold", color="#a78bfa", zorder=4)
-    _draw_prob_bars(ax, x, y, w, h, probs, RISK_LABELS, state, "#7c3aed")
+            fontsize=FS["risk_title"] * scale, fontweight="bold",
+            color=THEME["risk_title"], zorder=4)
+    _draw_prob_bars(ax, x, y, w, h, probs, RISK_LABELS, state,
+                    THEME["risk_title"], scale=scale)
 
 
-def _draw_crma_badge(ax, x, y, w, h, crma_state, p_he):
+def _draw_crma_badge(ax, x, y, w, h, crma_state, p_he, scale=1.0):
     c = CRMA_COLORS.get(crma_state, "#6b7280")
     ax.add_patch(mpatches.FancyBboxPatch((x, y), w, h,
-                 boxstyle="round,pad=0.005", fc=c, ec="white", lw=1.4, zorder=1))
+                 boxstyle="round,pad=0.005", fc=c, ec=c,
+                 lw=1.4 * scale, zorder=1))
     ax.text(x + w / 2, y + h * 0.65, crma_state.replace("_", " "),
-            ha="center", va="center", fontsize=9.5, fontweight="bold", color="white", zorder=4)
+            ha="center", va="center", fontsize=FS["crma_state"] * scale,
+            fontweight="bold", color="white", zorder=4)
     ax.text(x + w / 2, y + h * 0.27, f"P(High∪Ext) = {p_he:.3f}",
-            ha="center", va="center", fontsize=7.5, color="white", zorder=4)
+            ha="center", va="center", fontsize=FS["crma_phe"] * scale,
+            color="white", zorder=4)
 
 
 def _draw_arrow(ax, x0, y0, x1, y1):
     ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
-                arrowprops=dict(arrowstyle="-|>", color="#475569", lw=0.8),
+                arrowprops=dict(arrowstyle="-|>", color=THEME["arrow"], lw=0.8),
                 zorder=0)
 
 
@@ -191,25 +241,34 @@ def lead_for(init_month: int, season: str) -> int:
     return ((anchor - init_month) % 12) or 12
 
 
-def render_dag(ax, node: dict, header: str, season: str, lead: int | None = None):
+def render_dag(ax, node: dict, header: str, season: str,
+               lead: int | None = None, scale: float = 1.0,
+               box_scale: float = 1.05):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    ax.set_facecolor("#0f172a")
+    ax.set_facecolor(THEME["ax_bg"])
     ax.axis("off")
 
-    pw, ph = 0.18, 0.26
-    gap = 0.005
-    parent_y = 0.62
-    parent_xs = [0.005 + i * (pw + gap) for i in range(5)]
+    pw  = LAYOUT["pw"]  * box_scale
+    ph  = LAYOUT["ph"]  * box_scale
+    gap = LAYOUT["gap"] * box_scale
+    rw  = LAYOUT["rw"]  * box_scale
+    rh  = LAYOUT["rh"]  * box_scale
+    cw  = LAYOUT["cw"]  * box_scale
+    ch  = LAYOUT["ch"]  * box_scale
+    parent_y = LAYOUT["py"]
+    ry = LAYOUT["ry"]
+    cy = LAYOUT["cy"]
 
-    rw, rh = 0.32, 0.20
-    rx, ry = 0.34, 0.30
-
-    cw, ch = 0.30, 0.11
-    cx, cy = 0.35, 0.10
+    row_w = 5 * pw + 4 * gap
+    left = max(0.0, (1.0 - row_w) / 2)
+    parent_xs = [left + i * (pw + gap) for i in range(5)]
+    rx = (1.0 - rw) / 2
+    cx = (1.0 - cw) / 2
 
     ax.text(0.5, 0.985, header, ha="center", va="top",
-            fontsize=10, fontweight="bold", color="white")
+            fontsize=FS["panel_header"] * scale, fontweight="bold",
+            color=THEME["header"])
 
     parent_centers = []
     for i, cfg in enumerate(PARENT_CFG):
@@ -220,23 +279,64 @@ def render_dag(ax, node: dict, header: str, season: str, lead: int | None = None
             win = win.format(season=season)
         _draw_node_box(ax, x, parent_y, pw, ph,
                        cfg["title"], n["raw"], n["probs"], cfg["abbr"], n["state"],
-                       cfg["color"], window=win)
+                       cfg["color"], window=win, scale=scale)
         parent_centers.append((x + pw / 2, parent_y))
 
     risk = node["risk"]
-    _draw_risk_node(ax, rx, ry, rw, rh, risk["probs"], risk["state"])
+    _draw_risk_node(ax, rx, ry, rw, rh, risk["probs"], risk["state"], scale=scale)
     for (px, py) in parent_centers:
         _draw_arrow(ax, px, py, rx + rw / 2, ry + rh)
 
     crma = node["crma"]
-    _draw_crma_badge(ax, cx, cy, cw, ch, crma["state"], crma["p_he"])
+    _draw_crma_badge(ax, cx, cy, cw, ch, crma["state"], crma["p_he"], scale=scale)
     _draw_arrow(ax, rx + rw / 2, ry, cx + cw / 2, cy + ch)
 
     lead_txt = f"lead {lead} mo" if lead is not None else ""
     footer = (f"obs nodes = past 3/6 mo | SEAS5 forecast → {season} season"
               f"{(' (' + lead_txt + ')') if lead_txt else ''}")
     ax.text(0.5, 0.025, footer,
-            ha="center", va="bottom", fontsize=6.5, style="italic", color="#64748b")
+            ha="center", va="bottom", fontsize=FS["footer"] * scale,
+            style="italic", color=THEME["footer"])
+
+
+def render_single_pairing(month: str, top_id: str, ctr_id: str, spi_cat: str,
+                          caption: str, soft: pd.DataFrame, post: pd.DataFrame,
+                          season: str, lead: int | None, out_path: Path,
+                          scale: float = 1.7):
+    """One month, two admins stacked vertically — each DAG fills full width."""
+    panels = [("HIGHEST", top_id), ("CONTRAST", ctr_id)]
+    n = len(panels)
+    fig = plt.figure(figsize=(16, 7.0 * n))
+    fig.patch.set_facecolor(THEME["fig_bg"])
+    fig.suptitle(f"Drought BN DAG — {month}  ({spi_cat})",
+                 color=THEME["suptitle"], fontsize=15, fontweight="bold", y=0.995)
+
+    gs = fig.add_gridspec(n, 1, hspace=0.22)
+    axes = [fig.add_subplot(gs[i, 0]) for i in range(n)]
+
+    for ax, (tag, bid) in zip(axes, panels):
+        if bid not in soft.index or bid not in post.index:
+            ax.text(0.5, 0.5, f"missing {bid}", ha="center", va="center",
+                    color=THEME["state_dark"])
+            ax.axis("off")
+            continue
+        node = build_node(soft.loc[bid], post.loc[bid])
+        header = f"{tag}  -  {bid}  {node['boundary']}"
+        render_dag(ax, node, header, season=season, lead=lead, scale=scale)
+
+    fig.text(0.5, 0.018, caption, ha="center", va="bottom",
+             fontsize=11, style="italic", color=THEME["caption"], wrap=True)
+
+    legend_patches = [mpatches.Patch(color=c, label=s.replace("_", " "))
+                      for s, c in CRMA_COLORS.items()]
+    fig.legend(handles=legend_patches, loc="lower center", ncol=4,
+               frameon=False, fontsize=10, labelcolor=THEME["state_dark"],
+               bbox_to_anchor=(0.5, -0.005))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=160, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"Saved: {out_path}")
 
 
 def main() -> None:
@@ -246,14 +346,46 @@ def main() -> None:
     ap.add_argument("--posterior-prefix", default="drought_bn_v2_cdi_")
     ap.add_argument("--inputs-prefix", default="drought_inputs_")
     ap.add_argument("--out", default="output_v2_cdi/drought_bn_dag_compare_5months.png")
+    ap.add_argument("--single", default=None,
+                    help="Render only one pairing (MONTH like 2024-01_MAM, or "
+                         "'all' to emit one expanded figure per pairing). Each "
+                         "DAG is stacked vertically with bigger fonts.")
+    ap.add_argument("--single-out-dir", default="output_v2_cdi/bn-dag-single",
+                    help="Output directory for --single mode figures.")
     args = ap.parse_args()
+
+    if args.single:
+        targets = (list(PAIRINGS) if args.single == "all"
+                   else [p for p in PAIRINGS if p[0] == args.single])
+        if not targets:
+            valid = ", ".join(p[0] for p in PAIRINGS)
+            raise SystemExit(f"--single {args.single!r} matched no pairing. "
+                             f"Available months: {valid} (or 'all').")
+        for month, top_id, ctr_id, spi_cat, caption in targets:
+            soft_path = Path(args.inputs_dir) / f"{args.inputs_prefix}{month}.csv"
+            post_path = Path(args.posterior_dir) / f"{args.posterior_prefix}{month}.csv"
+            if not soft_path.exists() or not post_path.exists():
+                print(f"[skip] {month}: missing input or posterior CSV")
+                continue
+            soft = pd.read_csv(soft_path).set_index("id")
+            post = pd.read_csv(post_path).set_index("boundary_id")
+            try:
+                ym, season = month.split("_")
+                init_m = int(ym.split("-")[1])
+                lead = lead_for(init_m, season)
+            except Exception:
+                season, lead = "season", None
+            out = Path(args.single_out_dir) / f"drought_bn_dag_{month}.png"
+            render_single_pairing(month, top_id, ctr_id, spi_cat, caption,
+                                  soft, post, season, lead, out)
+        return
 
     fig, axes = plt.subplots(len(PAIRINGS), 2,
                              figsize=(15, 4.0 * len(PAIRINGS)),
                              gridspec_kw={"hspace": 0.30, "wspace": 0.04})
-    fig.patch.set_facecolor("#0f172a")
+    fig.patch.set_facecolor(THEME["fig_bg"])
     fig.suptitle("Drought BN DAG comparison — same SPI3 category, opposite CRMA, by month",
-                 color="white", fontsize=13, fontweight="bold", y=0.995)
+                 color=THEME["suptitle"], fontsize=13, fontweight="bold", y=0.995)
 
     for row, (month, top_id, ctr_id, spi_cat, caption) in enumerate(PAIRINGS):
         soft_path = Path(args.inputs_dir) / f"{args.inputs_prefix}{month}.csv"
@@ -261,13 +393,13 @@ def main() -> None:
         if not soft_path.exists() or not post_path.exists():
             for col in range(2):
                 axes[row][col].text(0.5, 0.5, f"missing {month}",
-                                    ha="center", va="center", color="white")
+                                    ha="center", va="center",
+                                    color=THEME["state_dark"])
                 axes[row][col].axis("off")
             continue
         soft = pd.read_csv(soft_path).set_index("id")
         post = pd.read_csv(post_path).set_index("boundary_id")
 
-        # Parse "YYYY-MM_SEASON" to compute SEAS5 lead from init month.
         try:
             ym, season = month.split("_")
             init_m = int(ym.split("-")[1])
@@ -278,7 +410,8 @@ def main() -> None:
         for col, bid in enumerate((top_id, ctr_id)):
             ax = axes[row][col]
             if bid not in soft.index or bid not in post.index:
-                ax.text(0.5, 0.5, f"missing {bid}", ha="center", va="center", color="white")
+                ax.text(0.5, 0.5, f"missing {bid}", ha="center", va="center",
+                        color=THEME["state_dark"])
                 ax.axis("off")
                 continue
             node = build_node(soft.loc[bid], post.loc[bid])
@@ -292,12 +425,12 @@ def main() -> None:
         cap_y = bbox_left.y0 - 0.008
         fig.text(cap_x, cap_y, caption,
                  ha="center", va="top", fontsize=10, style="italic",
-                 color="#cbd5e1")
+                 color=THEME["caption"])
 
     legend_patches = [mpatches.Patch(color=c, label=s.replace("_", " "))
                       for s, c in CRMA_COLORS.items()]
     fig.legend(handles=legend_patches, loc="lower center", ncol=4,
-               frameon=False, fontsize=9, labelcolor="white",
+               frameon=False, fontsize=9, labelcolor=THEME["state_dark"],
                bbox_to_anchor=(0.5, 0.005))
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
