@@ -82,7 +82,7 @@ def build_raw_tail(row: pd.Series) -> str:
     return f"{ratio:.2f}× RP"
 
 
-def row_to_dag(soft_row: pd.Series, dbn_row: pd.Series) -> dict:
+def row_to_dag(soft_row: pd.Series, dbn_row: pd.Series, date_str: str) -> dict:
     ant_probs  = [soft_row[f"ant_p{i}"] for i in range(1, 6)]
     exc_probs  = [soft_row[f"exc_p{i}"] for i in range(1, 6)]
     spa_probs  = [soft_row[f"spa_p{i}"] for i in range(1, 4)]
@@ -97,9 +97,18 @@ def row_to_dag(soft_row: pd.Series, dbn_row: pd.Series) -> dict:
         dbn_row["risk_extreme"],
     ]
 
+    # target_date and p_high_extreme are not always present in newer BN CSV
+    # outputs — fall back to the filename date and compute p_he from the
+    # high+extreme posteriors.
+    date = (str(dbn_row["target_date"])[:10]
+            if "target_date" in dbn_row.index else date_str)
+    p_he = (float(dbn_row["p_high_extreme"])
+            if "p_high_extreme" in dbn_row.index
+            else float(dbn_row["risk_high"]) + float(dbn_row["risk_extreme"]))
+
     return {
         "boundary": dbn_row["boundary_name"],
-        "date": str(dbn_row["target_date"])[:10],
+        "date": date,
         "ant": {
             "state": argmax_state(ant_probs, ANT_STATES),
             "probs": round_probs(ant_probs),
@@ -131,7 +140,7 @@ def row_to_dag(soft_row: pd.Series, dbn_row: pd.Series) -> dict:
         },
         "crma": {
             "state": str(dbn_row["crma_state"]),
-            "p_he": round(float(dbn_row["p_high_extreme"]), 6),
+            "p_he": round(p_he, 6),
         },
     }
 
@@ -154,7 +163,7 @@ def process_date(date_str: str, input_dir: str, dbn_dir: str, out_dir: str):
     for bid in dbn.index:
         if bid not in soft.index:
             continue
-        result[bid] = row_to_dag(soft.loc[bid], dbn.loc[bid])
+        result[bid] = row_to_dag(soft.loc[bid], dbn.loc[bid], date_str)
 
     out_path = os.path.join(out_dir, f"bn-dag-{date_str}.json")
     with open(out_path, "w") as f:

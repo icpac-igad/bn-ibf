@@ -36,19 +36,17 @@ ANT_STATES  = ["Severe_Drought", "Moderate_Drought", "Mild_Drought", "Normal", "
 DEF_STATES  = ["Very_Low", "Low", "Medium", "High", "Very_High"]
 SPA_STATES  = ["Localized", "Moderate", "Widespread"]
 TRN_STATES  = ["Deteriorating", "Stable", "Improving"]
-TAIL_STATES = ["High", "Moderate", "Low", "Nil"]   # severity decreases →
 RISK_STATES = ["Minimal", "Low", "Moderate", "High", "Extreme"]
 
-# `window` describes the time slice the node summarises. cur/trn are
-# observation-side (past months); def/spa/tail are SEAS5 forecast at
-# lead = lead_for_season(init_month, target_season). Per-row {season}
-# placeholder is filled in render_dag with the row's target season.
+# 4-parent BN structure used by the v2_notail_cdi posterior (the version
+# the paper's choropleth panels are built from). The tail-risk node is
+# omitted because the underlying BN does not consume it — the DAG figure
+# is faithful to the inference that produced the CRMA states shown.
 PARENT_CFG = [
-    dict(key="ant",  title="Current SPI3",    abbr=["SevDr", "ModDr", "MldDr", "Nrm", "Abv"], color="#a16207", window="obs past 3 mo"),
-    dict(key="def",  title="Forecast Deficit", abbr=["VLo", "Lo", "Med", "Hi", "VHi"],         color="#0ea5e9", window="SEAS5 → {season}"),
-    dict(key="spa",  title="Spatial",          abbr=["Loc", "Mod", "Wide"],                    color="#10b981", window="SEAS5 → {season}"),
-    dict(key="trn",  title="Trend",            abbr=["Det", "Stb", "Imp"],                     color="#f59e0b", window="obs past 6 mo"),
-    dict(key="tail", title="Tail Risk",        abbr=["Hi", "Mod", "Low", "Nil"],               color="#ef4444", window="SEAS5 → {season}"),
+    dict(key="ant", title="Current SPI3",     abbr=["SevDr", "ModDr", "MldDr", "Nrm", "Abv"], color="#a16207", window="obs past 3 mo"),
+    dict(key="def", title="Forecast Deficit", abbr=["VLo", "Lo", "Med", "Hi", "VHi"],         color="#0ea5e9", window="SEAS5 → {season}"),
+    dict(key="spa", title="Spatial",          abbr=["Loc", "Mod", "Wide"],                    color="#10b981", window="SEAS5 → {season}"),
+    dict(key="trn", title="Trend",            abbr=["Det", "Stb", "Imp"],                     color="#f59e0b", window="obs past 6 mo"),
 ]
 
 RISK_LABELS = ["Min", "Low", "Mod", "Hi", "Ext"]
@@ -94,28 +92,39 @@ LAYOUT = {
     "cy":  0.10,
 }
 
-# (month_tag, top_id, ctr_id, shared_spi3_cat, caption)
+# (month_tag, top_id, ctr_id, shared_spi3_cat, caption). All 5 pairings
+# are picked from the v2_notail_cdi sweep (2025-01..2026-04, 16 inits)
+# so the DAG figure matches the paper's choropleth pipeline. Each pair
+# shares a current-SPI-3 category but receives opposite CRMA outcomes,
+# so the split is forced onto the SEAS5 forecast deficit / spatial /
+# trend channels (tail node removed).
 PAIRINGS = [
-    ("2024-01_MAM", "ETH.4_1",  "UGA.24_1",
+    ("2025-03_JJA", "SDN.14_1", "SDN.2_1",
      "Severe_Drought",
-     "Both Severe_Drought: forecast deficit + Wide spatial + Hi tail → AR; "
-     "isolated stress alone → Monitor."),
-    ("2024-05_JJA", "SDN.17_1", "DJI.1_2",
-     "Above_Normal",
-     "Both Above_Normal SPI3: forecast deficit + Deteriorating trend overrides "
-     "the wet present."),
-    ("2024-08_OND", "KEN.21_1", "KEN.2_1",
+     "Same country (SDN), same Severe_Drought category, identical forecast "
+     "deficit (0.06) and Widespread hotspot. Soft-bin SPI3 magnitude (-2.38 "
+     "vs -1.50) is the discriminator: deeper drought drives AR (P_HE=0.90); "
+     "Al Qadarif stays Monitor."),
+    ("2025-08_OND", "KEN.40_1", "ERI.6_1",
      "Normal",
-     "Same country, same Normal SPI3: tail-risk and forecast deficit drive the "
-     "split."),
-    ("2025-02_MAM", "SSD.8_1",  "UGA.1_1",
+     "Both Normal SPI3 but opposite sides (-0.47 vs +0.18): SEAS5 forecast "
+     "deficit (0.24 Low vs 0.08 Very_Low) + Stable-vs-Improving trend split "
+     "AR (Tana River) vs Monitor (Anseba)."),
+    ("2025-09_DJF", "SOM.3_1",  "BDI.4_1",
+     "Above_Normal",
+     "Both Above_Normal SPI3 (+2.60 vs +0.75): SEAS5 forecast deficit (High "
+     "0.64 vs Low 0.25) + Deteriorating trend over-ride the wet present in "
+     "Banaadir, lifting AR despite SPI3 saying wet."),
+    ("2025-12_MAM", "KEN.9_1",  "ETH.6_1",
      "Severe_Drought",
-     "Both Severe_Drought: Improving trend + Localized spatial defuse the "
-     "Monitor case."),
-    ("2026-04_JJA", "SOM.5_1",  "KEN.35_1",
+     "Both Severe_Drought (-3.55 vs -1.87): Widespread hotspot (1.00 vs 0.27 "
+     "Localized) + Low-vs-VeryLow forecast deficit lift Isiolo to AR; Gambela's "
+     "localised footprint keeps it at Monitor."),
+    ("2026-04_JJA", "SOM.5_1",  "RWA.5_1",
      "Moderate_Drought",
-     "Same Moderate_Drought: very-high forecast deficit + Wide hotspot push "
-     "Bay into AR."),
+     "Both Moderate_Drought (-1.40 vs -1.11), same Widespread hotspot. Forecast "
+     "deficit (0.23 Low vs 0.16 Very_Low) + SPI3 magnitude split Bay (AR) from "
+     "Kigali (Monitor); Kigali's Deteriorating trend is not enough on its own."),
 ]
 
 
@@ -198,11 +207,14 @@ def argmax_state(probs, states):
 
 
 def build_node(soft: pd.Series, post: pd.Series) -> dict:
-    ant_p  = [soft[f"cur_p{i}"]  for i in range(1, 6)]
-    def_p  = [soft[f"def_p{i}"]  for i in range(1, 6)]
-    spa_p  = [soft[f"spa_p{i}"]  for i in range(1, 4)]
-    trn_p  = [soft[f"trn_p{i}"]  for i in range(1, 4)]
-    tail_p = [soft[f"tail_p{i}"] for i in range(1, 5)]
+    # drought_data_prep.py applies a per-node bin REVERSAL for
+    # _REVERSE_NODES = {"cur", "tail", "trn"} so the soft column order in
+    # the CSV is the opposite of STATES order. We reverse them back here
+    # so the bar / abbreviation indexing matches ANT_STATES / TRN_STATES.
+    ant_p  = [soft[f"cur_p{i}"] for i in range(1, 6)][::-1]
+    def_p  = [soft[f"def_p{i}"] for i in range(1, 6)]
+    spa_p  = [soft[f"spa_p{i}"] for i in range(1, 4)]
+    trn_p  = [soft[f"trn_p{i}"] for i in range(1, 4)][::-1]
     risk_p = [post["risk_minimal"], post["risk_low"], post["risk_moderate"],
               post["risk_high"], post["risk_extreme"]]
     p_he = float(post["risk_high"] + post["risk_extreme"])
@@ -215,18 +227,16 @@ def build_node(soft: pd.Series, post: pd.Series) -> dict:
 
     return {
         "boundary": post["boundary_name"],
-        "ant":  {"state": argmax_state(ant_p,  ANT_STATES),  "probs": ant_p,
-                 "raw": fmt(soft.get("current_spi3"), "SPI3")},
-        "def":  {"state": argmax_state(def_p,  DEF_STATES),  "probs": def_p,
-                 "raw": f"P={soft.get('forecast_deficit_prob',float('nan')):.3f}"
-                        if pd.notna(soft.get("forecast_deficit_prob")) else "N/A"},
-        "spa":  {"state": argmax_state(spa_p,  SPA_STATES),  "probs": spa_p,
-                 "raw": (f"{soft.get('hotspot_fraction',float('nan'))*100:.0f}% hotspot"
-                         if pd.notna(soft.get("hotspot_fraction")) else "N/A")},
-        "trn":  {"state": argmax_state(trn_p,  TRN_STATES),  "probs": trn_p,
-                 "raw": fmt(soft.get("trend_slope_spi_per_month"), "SPI/mo", signed=True)},
-        "tail": {"state": argmax_state(tail_p, TAIL_STATES), "probs": tail_p,
-                 "raw": fmt(soft.get("ens_min_spi_peak"), "SPI", signed=True)},
+        "ant": {"state": argmax_state(ant_p, ANT_STATES), "probs": ant_p,
+                "raw": fmt(soft.get("current_spi3"), "SPI3")},
+        "def": {"state": argmax_state(def_p, DEF_STATES), "probs": def_p,
+                "raw": f"P={soft.get('forecast_deficit_prob', float('nan')):.3f}"
+                       if pd.notna(soft.get("forecast_deficit_prob")) else "N/A"},
+        "spa": {"state": argmax_state(spa_p, SPA_STATES), "probs": spa_p,
+                "raw": (f"{soft.get('hotspot_fraction', float('nan')) * 100:.0f}% hotspot"
+                        if pd.notna(soft.get("hotspot_fraction")) else "N/A")},
+        "trn": {"state": argmax_state(trn_p, TRN_STATES), "probs": trn_p,
+                "raw": fmt(soft.get("trend_slope_spi_per_month"), "SPI/mo", signed=True)},
         "risk": {"state": post["risk_level"], "probs": risk_p},
         "crma": {"state": post["crma_state"], "p_he": p_he},
     }
@@ -249,7 +259,9 @@ def render_dag(ax, node: dict, header: str, season: str,
     ax.set_facecolor(THEME["ax_bg"])
     ax.axis("off")
 
-    pw  = LAYOUT["pw"]  * box_scale
+    n_parents = len(PARENT_CFG)
+    # pw scales as 5/n so 4 parents fill the same row width as 5.
+    pw  = LAYOUT["pw"]  * (5.0 / n_parents) * box_scale
     ph  = LAYOUT["ph"]  * box_scale
     gap = LAYOUT["gap"] * box_scale
     rw  = LAYOUT["rw"]  * box_scale
@@ -260,9 +272,9 @@ def render_dag(ax, node: dict, header: str, season: str,
     ry = LAYOUT["ry"]
     cy = LAYOUT["cy"]
 
-    row_w = 5 * pw + 4 * gap
+    row_w = n_parents * pw + (n_parents - 1) * gap
     left = max(0.0, (1.0 - row_w) / 2)
-    parent_xs = [left + i * (pw + gap) for i in range(5)]
+    parent_xs = [left + i * (pw + gap) for i in range(n_parents)]
     rx = (1.0 - rw) / 2
     cx = (1.0 - cw) / 2
 
@@ -342,15 +354,15 @@ def render_single_pairing(month: str, top_id: str, ctr_id: str, spi_cat: str,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--inputs-dir", default="bn_inputs_v2")
-    ap.add_argument("--posterior-dir", default="output_v2_cdi")
-    ap.add_argument("--posterior-prefix", default="drought_bn_v2_cdi_")
+    ap.add_argument("--posterior-dir", default="output_v2_notail_cdi")
+    ap.add_argument("--posterior-prefix", default="drought_bn_v2_notail_cdi_")
     ap.add_argument("--inputs-prefix", default="drought_inputs_")
-    ap.add_argument("--out", default="output_v2_cdi/drought_bn_dag_compare_5months.png")
+    ap.add_argument("--out", default="output_v2_notail_cdi/drought_bn_dag_compare_5months.png")
     ap.add_argument("--single", default=None,
-                    help="Render only one pairing (MONTH like 2024-01_MAM, or "
+                    help="Render only one pairing (MONTH like 2025-03_JJA, or "
                          "'all' to emit one expanded figure per pairing). Each "
                          "DAG is stacked vertically with bigger fonts.")
-    ap.add_argument("--single-out-dir", default="output_v2_cdi/bn-dag-single",
+    ap.add_argument("--single-out-dir", default="output_v2_notail_cdi/bn-dag-single",
                     help="Output directory for --single mode figures.")
     args = ap.parse_args()
 

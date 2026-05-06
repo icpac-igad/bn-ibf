@@ -105,9 +105,9 @@ PAIRINGS = [
     ("2026-03-04",
      [("HIGHEST", "TZA.9_1"), ("CONTRAST", "UGA.13_1"),
       ("NAIROBI - pre-event", "KEN.30_1")],
-     "Saturated + High tail → AR (Kilimanjaro). Normal + Wide → Monitor (Kabarole). "
-     "Nairobi: Saturated past + Mod hotspot but Decreasing forecast → Assess (P(H∪E)=0.10) "
-     "ahead of the 2026-04-06 flood event."),
+     "Saturated + High tail → AR (Kilimanjaro, P(H∪E)=0.60). Normal + Wide + Mod tail → "
+     "Assess (Kabarole, 0.148). Nairobi: Very_Wet past + Mod hotspot + Mod tail → "
+     "Actionable_Risk (P(H∪E)=0.30) two days ahead of the 6 March 2026 flood event."),
     ("2026-03-08",
      [("HIGHEST", "TZA.15_1"), ("CONTRAST", "TZA.7_1")],
      "Same country: every evidence node differs."),
