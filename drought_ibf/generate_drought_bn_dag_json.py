@@ -27,11 +27,17 @@ import re
 
 import pandas as pd
 
-CUR_STATES = ["Above_Normal", "Normal", "Mild_Drought",
-              "Moderate_Drought", "Severe_Drought"]
+# Canonical drought BN STATES (drought_bn_ibf_v1.py STATES dict). cur_p
+# and trn_p columns in the prep CSV are written in REVERSED order — see
+# drought_data_prep.py:_REVERSE_NODES — so we reverse them at read time
+# (in row_to_dag) rather than carrying a reversed STATES list here. This
+# keeps the JSON output's `probs` array in canonical Julia STATES order
+# and matches the convention used by plot_bn_dag_compare_5months.py.
+CUR_STATES = ["Severe_Drought", "Moderate_Drought", "Mild_Drought",
+              "Normal", "Above_Normal"]
 DEF_STATES = ["Very_Low", "Low", "Medium", "High", "Very_High"]
 SPA_STATES = ["Localized", "Moderate", "Widespread"]
-TRN_STATES = ["Improving", "Stable", "Deteriorating"]
+TRN_STATES = ["Deteriorating", "Stable", "Improving"]
 RISK_STATES = ["Minimal", "Low", "Moderate", "High", "Extreme"]
 
 
@@ -54,10 +60,13 @@ def raw_trn(row):
 
 
 def row_to_dag(prep_row: pd.Series, bn_row: pd.Series, init_str: str) -> dict:
-    cur_p = [prep_row[f"cur_p{i}"] for i in range(1, 6)]
+    # cur and trn columns are stored REVERSED in the prep CSV (see
+    # drought_data_prep.py:_REVERSE_NODES); reverse back here so probs[0]
+    # corresponds to STATES[0] of the canonical Julia STATES dict.
+    cur_p = [prep_row[f"cur_p{i}"] for i in range(1, 6)][::-1]
     def_p = [prep_row[f"def_p{i}"] for i in range(1, 6)]
     spa_p = [prep_row[f"spa_p{i}"] for i in range(1, 4)]
-    trn_p = [prep_row[f"trn_p{i}"] for i in range(1, 4)]
+    trn_p = [prep_row[f"trn_p{i}"] for i in range(1, 4)][::-1]
 
     risk_p = [bn_row["risk_minimal"], bn_row["risk_low"], bn_row["risk_moderate"],
               bn_row["risk_high"],   bn_row["risk_extreme"]]
@@ -75,9 +84,9 @@ def row_to_dag(prep_row: pd.Series, bn_row: pd.Series, init_str: str) -> dict:
     }
 
 
-def process(init_str: str, prep_dir: str, bn_dir: str, out_dir: str):
+def process(init_str: str, prep_dir: str, bn_dir: str, bn_prefix: str, out_dir: str):
     prep_glob = glob.glob(os.path.join(prep_dir, f"drought_inputs_{init_str}_*.csv"))
-    bn_glob   = glob.glob(os.path.join(bn_dir,   f"drought_bn_v2_notail_{init_str}_*.csv"))
+    bn_glob   = glob.glob(os.path.join(bn_dir,   f"{bn_prefix}{init_str}_*.csv"))
     if not prep_glob or not bn_glob:
         print(f"  SKIP {init_str}: prep={bool(prep_glob)} bn={bool(bn_glob)}")
         return
@@ -96,9 +105,17 @@ def process(init_str: str, prep_dir: str, bn_dir: str, out_dir: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--prep-dir", default="bn_inputs_v2")
-    ap.add_argument("--bn-dir",   default="output_v2_notail")
-    ap.add_argument("--out-dir",  default="output_v2_notail/bn-dag")
+    ap.add_argument("--prep-dir", default="bn_inputs_v2",
+                    help="Dir containing drought_inputs_<init>_<season>.csv files.")
+    ap.add_argument("--bn-dir",   default="output_v2_notail_cdi",
+                    help="Dir containing the BN posterior CSVs. Defaults to "
+                         "output_v2_notail_cdi/ (post-CDI 4-parent BN, the "
+                         "version the paper's choropleth panels are built from).")
+    ap.add_argument("--bn-prefix", default="drought_bn_v2_notail_cdi_",
+                    help="Filename prefix used by --bn-dir (default matches "
+                         "the post-CDI no-tail run).")
+    ap.add_argument("--out-dir",  default="output_v2_notail_cdi/bn-dag",
+                    help="Where to write drought-bn-dag-<init>.json files.")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     files = sorted(glob.glob(os.path.join(args.prep_dir, "drought_inputs_*.csv")))
@@ -109,7 +126,7 @@ def main():
             inits.append(m.group(1))
     print(f"Processing {len(inits)} init-months → {args.out_dir}/")
     for i in inits:
-        process(i, args.prep_dir, args.bn_dir, args.out_dir)
+        process(i, args.prep_dir, args.bn_dir, args.bn_prefix, args.out_dir)
 
 
 if __name__ == "__main__":
